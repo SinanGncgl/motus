@@ -553,7 +553,6 @@ export default function Subtitles() {
                       key={`${line.index}-${i}`}
                       text={line.text}
                       rowId={i}
-                      lineIndex={line.index}
                       time={
                         line.start !== undefined
                           ? formatSubtitleTime(line.start)

@@ -7,6 +7,8 @@ export interface PlayerHandle {
   playVideo(): void;
   pauseVideo(): void;
   getCurrentTime(): number;
+  /** Total media duration in seconds, if known. Optional. */
+  getDuration?(): number;
   /** Set playback speed (0.5, 1, 1.25, …). Optional; may be a no-op. */
   setPlaybackRate?(rate: number): void;
 }

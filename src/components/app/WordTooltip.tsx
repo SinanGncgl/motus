@@ -1,7 +1,7 @@
 import { SpeakerButton } from "@/components/app/SpeakerButton";
 import { offlineLookup } from "@/lib/offline-dictionary";
 import { cn } from "@/lib/utils";
-import { Bookmark, Plus } from "lucide-react";
+import { Bookmark, BookmarkCheck, Plus, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 interface Props {
@@ -11,16 +11,16 @@ interface Props {
   lang?: string;
   saved?: boolean;
   onSave?: () => void;
+  onRemove?: () => void;
   onOpenDialog?: () => void;
   children: ReactNode;
   className?: string;
 }
 
 /**
- * Inline, self-contained word widget: shows a popover with the offline
- * definition on hover (desktop) / tap (touch), plus quick "save" and
- * "details" actions. Used inside transcript lines so learners get instant
- * meaning without leaving the page.
+ * Inline, self-contained word widget: shows a compact popover with the
+ * offline definition on hover (desktop) / tap (touch), plus quick "save" and
+ * "details" actions. Keeps learners in context — no page navigation.
  */
 export function WordTooltip({
   word,
@@ -29,6 +29,7 @@ export function WordTooltip({
   lang,
   saved,
   onSave,
+  onRemove,
   onOpenDialog,
   children,
   className,
@@ -58,11 +59,11 @@ export function WordTooltip({
       </button>
       {open && (
         <span
-          className="absolute left-1/2 top-full z-50 mt-1 w-64 -translate-x-1/2 rounded-xl border bg-card p-3 text-left shadow-lg"
+          className="absolute left-1/2 top-full z-50 mt-1.5 w-64 -translate-x-1/2 rounded-xl border bg-popover p-3 text-left shadow-xl"
           onClick={(e) => e.stopPropagation()}
         >
           <span className="flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold text-foreground">
+            <span className="text-[15px] font-semibold text-popover-foreground">
               {display}
             </span>
             <SpeakerButton
@@ -72,7 +73,7 @@ export function WordTooltip({
               className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
             />
           </span>
-          <span className="mt-1 block text-xs leading-5 text-foreground/90">
+          <span className="mt-1.5 block text-[13px] leading-5 text-popover-foreground/90">
             {entry?.definition ?? (
               <span className="italic text-muted-foreground">
                 No offline definition — open for details.
@@ -80,15 +81,30 @@ export function WordTooltip({
             )}
           </span>
           {entry?.example && (
-            <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+            <span className="mt-1.5 block border-t border-border/60 pt-1.5 text-[11px] leading-4 text-muted-foreground">
               “{entry.example}”
             </span>
           )}
-          <span className="mt-2 flex items-center gap-2">
+          <span className="mt-2.5 flex items-center gap-2 border-t border-border/60 pt-2.5">
             {saved ? (
-              <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                <Bookmark className="size-3" /> Saved
-              </span>
+              <>
+                <span className="flex items-center gap-1 text-[11px] font-medium text-primary">
+                  <BookmarkCheck className="size-3" /> Saved
+                </span>
+                {onRemove && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemove();
+                      setOpen(false);
+                    }}
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <X className="size-3" /> Remove
+                  </button>
+                )}
+              </>
             ) : (
               <button
                 type="button"
@@ -97,7 +113,7 @@ export function WordTooltip({
                   onSave?.();
                   setOpen(false);
                 }}
-                className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground"
+                className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
                 <Plus className="size-3" /> Save word
               </button>

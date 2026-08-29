@@ -46,6 +46,7 @@ export function FilePlayer({
       },
       pauseVideo: () => video.pause(),
       getCurrentTime: () => video.currentTime,
+      getDuration: () => (Number.isFinite(video.duration) ? video.duration : 0),
       setPlaybackRate: (rate: number) => { video.playbackRate = rate; },
     };
     playerRef.current = handle;
