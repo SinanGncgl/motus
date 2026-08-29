@@ -1,0 +1,37 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+isolate
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.njsproj
+*.sln
+*.sw?
+
+# --- Model binaries: never commit (pulled at build time) ---
+# ONNX Whisper models (large) — fetched into public/models via scripts/setup-models
+public/models/
+# Prebuilt ONNX Runtime WASM binaries
+public/wasm/
+public/wasm-sql/
+# Downloaded subtitle/model caches
+*.cache
+
+# Local environment
+.env
+.env.local

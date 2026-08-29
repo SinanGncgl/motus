@@ -1,0 +1,450 @@
+#!/usr/bin/env node
+import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { join, extname } from "node:path";
+import { homedir } from "node:os";
+import { spawn } from "node:child_process";
+import pg from "pg";
+
+const PORT = Number(process.env.PORT ?? 8787);
+const HOST = process.env.HOST ?? "0.0.0.0";
+const DATA_DIR = process.env.DATA_DIR ?? join(homedir(), ".motus");
+const UPLOAD_DIR = join(DATA_DIR, "uploads");
+const DIST_DIR = process.env.DIST_DIR ?? join(process.cwd(), "dist");
+const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://sinang@127.0.0.1:5432/motus";
+const MAX_BODY = 60 * 1024 * 1024;
+// Base the app uses to reach the local server (same-origin in the browser).
+const GRAB_BASE = process.env.GRAB_BASE ?? "";
+
+await mkdir(UPLOAD_DIR, { recursive: true });
+const pool = new pg.Pool({ connectionString: DATABASE_URL });
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  name TEXT, email TEXT, image TEXT, is_anonymous BOOLEAN
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY, user_id TEXT
+);
+CREATE TABLE IF NOT EXISTS subtitles (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  source_type TEXT,
+  video_id TEXT,
+  video_type TEXT,
+  file_id TEXT,
+  file_name TEXT,
+  language TEXT,
+  lines_json TEXT NOT NULL DEFAULT '[]',
+  created_at BIGINT,
+  updated_at BIGINT,
+  last_position DOUBLE PRECISION
+);
+CREATE TABLE IF NOT EXISTS saved_words (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  word TEXT NOT NULL,
+  display TEXT,
+  definition TEXT,
+  example TEXT,
+  source_title TEXT,
+  language TEXT,
+  created_at BIGINT,
+  updated_at BIGINT
+);
+CREATE TABLE IF NOT EXISTS anki_cards (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  saved_word_id TEXT NOT NULL,
+  front TEXT,
+  back TEXT,
+  box INTEGER DEFAULT 0,
+  due_at BIGINT,
+  last_reviewed_at BIGINT,
+  created_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_sub_user ON subtitles(user_id);
+CREATE INDEX IF NOT EXISTS idx_word_user ON saved_words(user_id);
+CREATE INDEX IF NOT EXISTS idx_card_user ON anki_cards(user_id);
+CREATE INDEX IF NOT EXISTS idx_card_word ON anki_cards(saved_word_id);
+`;
+
+const id = (p) => `${p}_${randomUUID()}`;
+const now = () => Date.now();
+
+// Initialize schema + seed default user.
+await pool.query(SCHEMA);
+await pool.query(
+  "INSERT INTO users (id,name,email,image,is_anonymous) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
+  ["local-user", "Local learner", "local@localhost", null, true],
+);
+
+// ---- query helpers ----
+const q = (text, params = []) => pool.query(text, params);
+const q1 = async (text, params = []) => (await pool.query(text, params)).rows[0] ?? null;
+
+// ---- helpers ----
+function cors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Local-Session");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Private-Network", "true");
+  res.setHeader("Cache-Control", "no-store");
+}
+function send(res, status, value, headers = {}) { cors(res); res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", ...headers }); res.end(JSON.stringify(value)); }
+function fail(res, status, message) { send(res, status, { error: message }); }
+async function body(req) {
+  const chunks = []; let size = 0;
+  for await (const chunk of req) { size += chunk.length; if (size > MAX_BODY) throw new Error("BODY_TOO_LARGE"); chunks.push(chunk); }
+  const raw = Buffer.concat(chunks);
+  return (req.headers["content-type"] ?? "").includes("application/json") ? JSON.parse(raw.toString("utf8") || "{}") : raw;
+}
+async function currentUser(req) {
+  const token = req.headers["x-local-session"];
+  const row = token ? await q1("SELECT user_id FROM sessions WHERE token = $1", [token]) : null;
+  const uid = row?.user_id ?? "local-user";
+  const u = await q1("SELECT id,name,email,image,is_anonymous FROM users WHERE id = $1", [uid]);
+  return u ? { id: u.id, name: u.name ?? undefined, email: u.email ?? undefined, image: u.image ?? undefined, isAnonymous: !!u.is_anonymous } : { id: "local-user", name: "Local learner", email: "local@localhost", isAnonymous: true };
+}
+function subtitleView(s) {
+  return {
+    _id: s.id,
+    id: s.id,
+    userId: s.user_id,
+    title: s.title,
+    sourceType: s.source_type,
+    videoId: s.video_id,
+    videoType: s.video_type,
+    fileId: s.file_id,
+    fileName: s.file_name,
+    language: s.language,
+    lines: typeof s.lines_json === "string" ? JSON.parse(s.lines_json || "[]") : (s.lines_json || []),
+    lastPosition: s.last_position,
+    createdAt: s.created_at,
+    updatedAt: s.updated_at,
+    fileUrl: s.file_name ? `/api/uploads/${s.file_name}` : undefined,
+  };
+}
+async function words(uid) {
+  const ws = await q("SELECT * FROM saved_words WHERE user_id = $1 ORDER BY updated_at DESC", [uid]);
+  return Promise.all(ws.rows.map(async (w) => {
+    const c = await q1("SELECT box, due_at FROM anki_cards WHERE saved_word_id = $1", [w.id]);
+    return { _id: w.id, word: w.word, display: w.display, definition: w.definition, example: w.example, sourceTitle: w.source_title ?? undefined, language: w.language ?? undefined, cardBox: c?.box ?? 0, cardDueAt: c?.due_at ?? null };
+  }));
+}
+async function cards(uid) {
+  const r = await q("SELECT id, front, back, box, due_at FROM anki_cards WHERE user_id = $1", [uid]);
+  return r.rows.map((c) => ({ id: c.id, _id: c.id, front: c.front, back: c.back, box: c.box, dueAt: c.due_at }));
+}
+
+async function transcript(videoId, lang) {
+  for (const language of [(lang || "en-US").split("-")[0], "en"]) {
+    try {
+      const r = await fetch(`https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${language}&fmt=json3`, { headers: { "User-Agent": "Mozilla/5.0" } });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const lines = (d.events ?? []).filter((e) => e.segs).map((e, i) => ({ index: i + 1, start: e.tStartMs / 1000, end: (e.tStartMs + (e.dDurationMs ?? 0)) / 1000, text: e.segs.map((s) => s.utf8 ?? "").join("").trim() })).filter((x) => x.text);
+      if (lines.length) return lines;
+    } catch { }
+  }
+  throw new Error("NO_CAPTIONS");
+}
+function ytDlp(url, output) {
+  const args = ["-f", "bestaudio[ext=m4a]/bestaudio/best", "--no-playlist", "-x", "--audio-format", "mp3", "-o", output, url];
+  const cookiesFrom = process.env.GRAB_COOKIES_FROM_BROWSER?.trim() ?? "";
+  if (cookiesFrom) args.push("--cookies-from-browser", cookiesFrom);
+  return new Promise((resolve, reject) => {
+    const p = spawn("yt-dlp", args);
+    let e = ""; p.stderr.on("data", (d) => (e += d));
+    p.on("error", () => reject(new Error("YTDLP_MISSING")));
+    p.on("close", (code) => (code === 0 ? resolve() : reject(new Error(e.slice(-1500) || "YTDLP_FAILED"))));
+  });
+}
+/** Resolve the installed yt-dlp version, or null when it isn't installed. */
+function ytDlpVersion() {
+  return new Promise((resolve) => {
+    const proc = spawn("yt-dlp", ["--version"], { windowsHide: true });
+    let out = ""; let done = false;
+    const finish = (value) => { if (!done) { done = true; resolve(value); } };
+    proc.stdout.on("data", (d) => (out += d));
+    proc.stderr.on("data", () => {});
+    proc.on("error", () => finish(null));
+    proc.on("close", () => finish(out.trim() || null));
+    setTimeout(() => finish(null), 5000);
+  });
+}
+async function staticFile(res, path) {
+  const safe = path.replace(/^\/+/, "");
+  const file = join(DIST_DIR, safe || "index.html");
+  const isAsset = /^(models|assets|wasm)\//.test(safe);
+  try {
+    const data = await readFile(file); cors(res);
+    res.writeHead(200, { "Content-Type": { ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".html": "text/html", ".json": "application/json; charset=utf-8", ".onnx": "application/octet-stream" }[extname(file)] || "application/octet-stream" });
+    res.end(data);
+  } catch {
+    if (isAsset) return fail(res, 404, "Not found: " + safe);
+    try { const data = await readFile(join(DIST_DIR, "index.html")); cors(res); res.writeHead(200, { "Content-Type": "text/html" }); res.end(data); }
+    catch { fail(res, 404, "Frontend not built. Run bun run build first."); }
+  }
+}
+
+const server = createServer(async (req, res) => {
+  cors(res);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+  const u = new URL(req.url, `http://${req.headers.host}`);
+  const path = u.pathname;
+  try {
+    if (!path.startsWith("/api/") && !path.startsWith("/grab") && path !== "/health") return staticFile(res, path);
+    if (req.method === "GET" && (path === "/health" || path === "/api/health")) return send(res, 200, { ok: true, local: true, ytDlp: true, db: "postgres", dbUrl: DATABASE_URL });
+    if (req.method === "POST" && path === "/api/auth/guest") {
+      const token = randomUUID();
+      await q("INSERT INTO sessions (token,user_id) VALUES ($1,$2) ON CONFLICT (token) DO UPDATE SET user_id = $2", [token, "local-user"]);
+      return send(res, 200, { token, user: await currentUser(req) });
+    }
+    if (req.method === "GET" && path === "/api/auth/me") return send(res, 200, { user: await currentUser(req) });
+    if (req.method === "POST" && path === "/api/auth/logout") return send(res, 200, { ok: true });
+    const usr = await currentUser(req), uid = usr.id, p = path.split("/").filter(Boolean);
+
+    if (req.method === "GET" && path === "/api/subtitles") {
+      const rows = await q("SELECT * FROM subtitles WHERE user_id = $1 ORDER BY updated_at DESC", [uid]);
+      return send(res, 200, rows.rows.map(subtitleView));
+    }
+    if (req.method === "POST" && path === "/api/subtitles") {
+      const a = await body(req);
+      const sid = id("sub");
+      await q("INSERT INTO subtitles (id,user_id,title,source_type,video_id,video_type,file_id,file_name,language,lines_json,created_at,updated_at,last_position) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+        [sid, uid, String(a.title || "Untitled subtitles"), a.sourceType || "plain", a.videoId || null, a.fileId ? "file" : a.videoId ? "youtube" : null, a.fileId || null, a.fileName || null, a.language || null, JSON.stringify(a.lines || []), now(), now(), 0]);
+      return send(res, 200, subtitleView(await q1("SELECT * FROM subtitles WHERE id = $1", [sid])));
+    }
+    if (p[0] === "api" && p[1] === "subtitles" && p[2]) {
+      const s = await q1("SELECT * FROM subtitles WHERE id = $1 AND user_id = $2", [p[2], uid]);
+      if (!s) return fail(res, 404, "Subtitle not found");
+      if (req.method === "GET") return send(res, 200, subtitleView(s));
+      if (req.method === "PATCH") {
+        const upd = await body(req);
+        // Map camelCase client keys -> snake_case columns.
+        const fieldMap = {
+          title: "title", sourceType: "source_type", videoId: "video_id",
+          videoType: "video_type", fileId: "file_id", fileName: "file_name",
+          language: "language", lastPosition: "last_position",
+        };
+        const parts = []; const vals = [];
+        for (const [clientKey, col] of Object.entries(fieldMap)) if (clientKey in upd) { parts.push(`${col} = $${parts.length + 1}`); vals.push(upd[clientKey]); }
+        if ("lines" in upd) { parts.push(`lines_json = $${parts.length + 1}`); vals.push(JSON.stringify(upd.lines)); }
+        if (parts.length) {
+          const n = parts.length;
+          parts.push(`updated_at = $${n + 1}::bigint`);
+          vals.push(BigInt(now()));
+          await q(`UPDATE subtitles SET ${parts.join(", ")} WHERE id = $${n + 2}::text AND user_id = $${n + 3}::text`, [...vals, p[2], uid]);
+        }
+        return send(res, 200, { ok: true });
+      }
+      if (req.method === "DELETE") {
+        await q("DELETE FROM subtitles WHERE id = $1 AND user_id = $2", [p[2], uid]);
+        return send(res, 200, { ok: true });
+      }
+    }
+
+    if (req.method === "GET" && path === "/api/uploads" && p[2]) {
+      try { const data = await readFile(join(UPLOAD_DIR, p[2])); cors(res); res.writeHead(200, { "Content-Type": "audio/mpeg" }); res.end(data); } catch { fail(res, 404, "File not found"); } return;
+    }
+    if (req.method === "POST" && path === "/api/uploads") {
+      const a = await body(req);
+      const name = `${id("upload")}${extname(String(req.headers["x-file-name"] || ".m4a"))}`;
+      await writeFile(join(UPLOAD_DIR, name), a);
+      return send(res, 200, { storageId: name, fileName: name });
+    }
+
+    if (req.method === "GET" && path === "/api/words") return send(res, 200, await words(uid));
+    if (req.method === "POST" && path === "/api/words") {
+      const a = await body(req);
+      const word = String(a.word).trim().toLowerCase();
+      const existing = await q1("SELECT * FROM saved_words WHERE user_id = $1 AND word = $2", [uid, word]);
+      if (existing) {
+        await q("UPDATE saved_words SET display=$1, definition=$2, example=$3, source_title=$4, language=$5, updated_at=$6 WHERE id=$7",
+          [a.display || existing.display || word, a.definition || existing.definition || "", a.example || existing.example || "", a.sourceTitle ?? existing.source_title ?? null, a.language ?? existing.language ?? null, now(), existing.id]);
+        const c = await q1("SELECT id FROM anki_cards WHERE saved_word_id = $1", [existing.id]);
+        if (c) await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [a.display || existing.display || word, [a.definition, a.example].filter(Boolean).join("\n\n") || a.display || existing.display || word, c.id]);
+        return send(res, 200, { wordId: existing.id, created: false });
+      }
+      const wid = id("word");
+      await q("INSERT INTO saved_words (id,user_id,word,display,definition,example,source_title,language,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+        [wid, uid, word, a.display || word, a.definition || "", a.example || "", a.sourceTitle ?? null, a.language ?? null, now(), now()]);
+      const cid = id("card");
+      await q("INSERT INTO anki_cards (id,user_id,saved_word_id,front,back,box,due_at,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+        [cid, uid, wid, a.display || word, [a.definition, a.example].filter(Boolean).join("\n\n") || a.display || word, 0, now(), now()]);
+      return send(res, 200, { wordId: wid, created: true });
+    }
+    if (p[0] === "api" && p[1] === "words" && p[2]) {
+      const w = await q1("SELECT * FROM saved_words WHERE id = $1 AND user_id = $2", [p[2], uid]);
+      if (!w) return fail(res, 404, "Word not found");
+      if (req.method === "PATCH") {
+        const upd = await body(req);
+        const allowed = ["display", "definition", "example", "source_title", "language"];
+        const parts = []; const vals = [];
+        for (const k of allowed) if (k in upd) { parts.push(`${k} = $${parts.length + 1}`); vals.push(upd[k]); }
+        if (parts.length) {
+          const n = parts.length;
+          parts.push(`updated_at = $${n + 1}::bigint`);
+          vals.push(BigInt(now()));
+          await q(`UPDATE saved_words SET ${parts.join(", ")} WHERE id = $${n + 2}::text AND user_id = $${n + 3}::text`, [...vals, p[2], uid]);
+        }
+        const c = await q1("SELECT id FROM anki_cards WHERE saved_word_id = $1", [p[2]]);
+        if (c) {
+          if (upd.resetCard) {
+            await q("UPDATE anki_cards SET box=0, due_at=$1, last_reviewed_at=NULL WHERE id=$2", [now(), c.id]);
+          } else {
+            await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [upd.display || w.display, [upd.definition, upd.example].filter(Boolean).join("\n\n") || upd.display || w.display, c.id]);
+          }
+        }
+        return send(res, 200, { ok: true });
+      }
+      if (req.method === "DELETE") {
+        await q("DELETE FROM anki_cards WHERE saved_word_id = $1", [p[2]]);
+        await q("DELETE FROM saved_words WHERE id = $1 AND user_id = $2", [p[2], uid]);
+        return send(res, 200, { ok: true });
+      }
+    }
+
+    if (req.method === "GET" && path === "/api/cards/due") {
+      const due = await q("SELECT id, front, back, box, due_at FROM anki_cards WHERE user_id = $1 AND due_at <= $2 ORDER BY due_at ASC LIMIT 100", [uid, now()]);
+      return send(res, 200, due.rows.map((c) => ({ id: c.id, _id: c.id, front: c.front, back: c.back, box: c.box, dueAt: c.due_at })));
+    }
+    if (req.method === "GET" && path === "/api/cards/due-count") {
+      const n = await q1("SELECT COUNT(*)::int AS n FROM anki_cards WHERE user_id = $1 AND due_at <= $2", [uid, now()]);
+      return send(res, 200, n.n);
+    }
+    if (req.method === "POST" && path === "/api/cards/rate") {
+      const a = await body(req);
+      const c = await q1("SELECT * FROM anki_cards WHERE id = $1 AND user_id = $2", [a.cardId, uid]);
+      if (!c) return fail(res, 404, "Card not found");
+      const box = a.rating === "again" ? 0 : Math.min(c.box + (a.rating === "easy" ? 2 : 1), 5);
+      const intervals = [60000, 600000, 86400000, 259200000, 604800000, 1814400000];
+      const dueAt = now() + (a.rating === "again" ? 60000 : intervals[box]);
+      await q("UPDATE anki_cards SET box=$1, due_at=$2, last_reviewed_at=$3 WHERE id=$4", [box, dueAt, now(), c.id]);
+      return send(res, 200, { ok: true });
+    }
+
+    if (req.method === "POST" && path === "/api/transcript") { const a = await body(req); return send(res, 200, { videoId: a.videoId, lines: await transcript(a.videoId, a.lang) }); }
+    if (req.method === "POST" && (path === "/grab" || path === "/api/grab")) {
+      const a = await body(req);
+      try {
+        const name = `${id("youtube")}.mp3`;
+        await ytDlp(a.url, join(UPLOAD_DIR, name));
+        const data = await readFile(join(UPLOAD_DIR, name));
+        cors(res); res.writeHead(200, { "Content-Type": "audio/mpeg", "Content-Disposition": 'inline; filename="audio.mp3"' });
+        return res.end(data);
+      } catch (e) {
+        const msg = String(e?.message || e);
+        if (msg.includes("403") || msg.includes("Forbidden")) return send(res, 502, { error: "YTDLP_FAILED", message: "YouTube blocked this download — try with GRAB_COOKIES_FROM_BROWSER set." });
+        return send(res, 502, { error: "YTDLP_FAILED", message: msg.slice(-300) });
+      }
+    }
+    // Streaming grab: emit real download progress over SSE, then hand back a
+    // one-shot binary URL the client can fetch. Keeps the UX honest (no fake
+    // indeterminate spinner) and still works with the existing buffered /grab.
+    // Accepts GET (for EventSource) with ?url=, or POST with a JSON body.
+    if ((req.method === "POST" || req.method === "GET") && path === "/grab-stream") {
+      let url = "";
+      if (req.method === "GET") {
+        url = new URL(req.url, `http://${req.headers.host}`).searchParams.get("url")?.trim() ?? "";
+      } else {
+        const a = await body(req);
+        url = typeof a?.url === "string" ? a.url.trim() : "";
+      }
+      if (!/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//.test(url)) {
+        return send(res, 400, { error: "INVALID_URL", message: "That isn't a YouTube link." });
+      }
+      const name = `${id("youtube")}.mp3`;
+      const outPath = join(UPLOAD_DIR, name);
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+      });
+      const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      let sent = 0;
+      const flush = (n) => { if (n > sent) { sent = n; send("progress", { stage: "downloading", percent: n }); } };
+      const version = await ytDlpVersion();
+      if (!version) {
+        send("error", { code: "YTDLP_MISSING", message: "yt-dlp isn't installed. Run: brew install yt-dlp (or: pip install -U yt-dlp)" });
+        return res.end();
+      }
+      const args = ["-f", "bestaudio[ext=m4a]/bestaudio/best", "--no-playlist", "-x", "--audio-format", "mp3", "--newline", "-o", outPath, url];
+      const cookiesFrom = process.env.GRAB_COOKIES_FROM_BROWSER?.trim() ?? "";
+      if (cookiesFrom) args.push("--cookies-from-browser", cookiesFrom);
+      const p = spawn("yt-dlp", args, { windowsHide: true });
+      let stderr = "";
+      let closed = false;
+      const finish = () => { if (!closed) { closed = true; res.end(); } };
+      const cleanup = () => unlink(outPath).catch(() => {});
+      const onErr = (d) => {
+        const txt = d.toString();
+        stderr += txt;
+        if (stderr.length > 4000) stderr = stderr.slice(-4000);
+        const m = txt.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
+        if (m) flush(Math.min(100, Math.round(Number(m[1]))));
+        if (/\[download\]\s+Destination:/.test(txt)) send("progress", { stage: "downloading", percent: sent });
+        if (/\[ExtractAudio\]\s+Destination:/.test(txt)) send("progress", { stage: "loading", percent: 100 });
+      };
+      p.stderr.on("data", onErr);
+      p.on("error", (err) => {
+        send("error", { code: "YTDLP_MISSING", message: String(err?.message || err) });
+        finish();
+      });
+      p.on("close", async (code) => {
+        if (code !== 0) {
+          const tail = stderr.split("\n").map((l) => l.trim()).filter(Boolean).slice(-2).join(" · ") || "yt-dlp couldn't grab that video's audio.";
+          send("error", { code: "YTDLP_FAILED", message: tail });
+          cleanup();
+          return finish();
+        }
+        try {
+          await readFile(outPath);
+          send("progress", { stage: "loading", percent: 100 });
+          send("done", { fileUrl: `${GRAB_BASE}/grab-file/${name}` });
+        } catch {
+          send("error", { code: "GRAB_EMPTY", message: "Download finished but no audio file was produced." });
+        }
+        finish();
+      });
+      req.on("close", () => { if (!closed) { closed = true; p.kill("SIGTERM"); cleanup(); } });
+      return;
+    }
+    // One-shot binary fetch for a completed streaming grab (see /grab-stream).
+    if (req.method === "GET" && path.startsWith("/grab-file/")) {
+      const name = decodeURIComponent(path.slice("/grab-file/".length));
+      if (!/^[A-Za-z0-9_-]+\.mp3$/.test(name)) return fail(res, 400, "Bad filename");
+      try {
+        const data = await readFile(join(UPLOAD_DIR, name));
+        cors(res);
+        res.writeHead(200, { "Content-Type": "audio/mpeg", "Content-Disposition": 'inline; filename="audio.mp3"' });
+        res.end(data);
+        unlink(join(UPLOAD_DIR, name)).catch(() => {});
+      } catch {
+        fail(res, 404, "Not found");
+      }
+      return;
+    }
+    if (req.method === "POST" && path === "/api/dictionary") {
+      const a = await body(req);
+      try {
+        const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(a.word)}`);
+        const d = await r.json();
+        const m = d?.[0]?.meanings?.[0];
+        return send(res, 200, { definition: m?.definitions?.[0]?.definition || "", example: m?.definitions?.find((x) => x.example)?.example || "" });
+      } catch { return send(res, 200, null); }
+    }
+    return fail(res, 404, "Not found");
+  } catch (e) {
+    console.error(e);
+    return fail(res, e.message === "NO_CAPTIONS" ? 404 : 500, e.message || "Server error");
+  }
+});
+
+server.listen(PORT, HOST, () => console.log(`Motus local server (Postgres) listening on http://${HOST}:${PORT}`));
