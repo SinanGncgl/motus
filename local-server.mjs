@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS saved_words (
   example TEXT,
   source_title TEXT,
   language TEXT,
+  translation TEXT,
   created_at BIGINT,
   updated_at BIGINT
 );
@@ -96,6 +97,8 @@ function formatCardBack(a, fallbackWord) {
 
 // Initialize schema + seed default user.
 await pool.query(SCHEMA);
+// Migration: add translation column to saved_words if missing
+await pool.query("ALTER TABLE saved_words ADD COLUMN IF NOT EXISTS translation TEXT").catch(() => {});
 await pool.query(
   "INSERT INTO users (id,name,email,image,is_anonymous) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
   ["local-user", "Local learner", "local@localhost", null, true],
@@ -298,15 +301,15 @@ const server = createServer(async (req, res) => {
       const word = String(a.word).trim().toLowerCase();
       const existing = await q1("SELECT * FROM saved_words WHERE user_id = $1 AND word = $2", [uid, word]);
       if (existing) {
-        await q("UPDATE saved_words SET display=$1, definition=$2, example=$3, source_title=$4, language=$5, updated_at=$6 WHERE id=$7",
-          [a.display || existing.display || word, a.definition || existing.definition || "", a.example || existing.example || "", a.sourceTitle ?? existing.source_title ?? null, a.language ?? existing.language ?? null, now(), existing.id]);
+        await q("UPDATE saved_words SET display=$1, definition=$2, example=$3, source_title=$4, language=$5, translation=$6, updated_at=$7 WHERE id=$8",
+          [a.display || existing.display || word, a.definition || existing.definition || "", a.example || existing.example || "", a.sourceTitle ?? existing.source_title ?? null, a.language ?? existing.language ?? null, a.translation ?? existing.translation ?? null, now(), existing.id]);
         const c = await q1("SELECT id FROM anki_cards WHERE saved_word_id = $1", [existing.id]);
         if (c) await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [a.display || existing.display || word, formatCardBack(a, existing.display || word), c.id]);
         return send(res, 200, { wordId: existing.id, created: false });
       }
       const wid = id("word");
-      await q("INSERT INTO saved_words (id,user_id,word,display,definition,example,source_title,language,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
-        [wid, uid, word, a.display || word, a.definition || "", a.example || "", a.sourceTitle ?? null, a.language ?? null, now(), now()]);
+      await q("INSERT INTO saved_words (id,user_id,word,display,definition,example,source_title,language,translation,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+        [wid, uid, word, a.display || word, a.definition || "", a.example || "", a.sourceTitle ?? null, a.language ?? null, a.translation ?? null, now(), now()]);
       const cid = id("card");
       await q("INSERT INTO anki_cards (id,user_id,saved_word_id,front,back,box,due_at,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
         [cid, uid, wid, a.display || word, formatCardBack(a, a.display || word), 0, now(), now()]);
@@ -317,7 +320,7 @@ const server = createServer(async (req, res) => {
       if (!w) return fail(res, 404, "Word not found");
       if (req.method === "PATCH") {
         const upd = await body(req);
-        const allowed = ["display", "definition", "example", "source_title", "language"];
+        const allowed = ["display", "definition", "example", "source_title", "language", "translation"];
         const parts = []; const vals = [];
         for (const k of allowed) if (k in upd) { parts.push(`${k} = $${parts.length + 1}`); vals.push(upd[k]); }
         if (parts.length) {
@@ -356,8 +359,31 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && path === "/api/cards/due") {
-      const due = await q("SELECT id, front, back, box, due_at FROM anki_cards WHERE user_id = $1 AND due_at <= $2 ORDER BY due_at ASC LIMIT 100", [uid, now()]);
-      return send(res, 200, due.rows.map((c) => ({ id: c.id, _id: c.id, front: c.front, back: c.back, box: c.box, dueAt: c.due_at })));
+      const due = await q(
+        `SELECT c.id, c.front, c.back, c.box, c.due_at, w.translation, w.definition, w.example
+         FROM anki_cards c
+         LEFT JOIN saved_words w ON c.saved_word_id = w.id
+         WHERE c.user_id = $1 AND c.due_at <= $2
+         ORDER BY c.due_at ASC LIMIT 100`,
+        [uid, now()],
+      );
+      return send(res, 200, due.rows.map((c) => {
+        // Rebuild card back with translation if available and not already in back
+        let back = c.back || "";
+        if (c.translation && !back.includes("Translation:")) {
+          const parts = [back, `Translation: ${c.translation}`].filter(Boolean);
+          back = parts.join("\n\n");
+        } else if (c.translation) {
+          // Already has translation in back, keep as-is
+        } else if (c.definition && !back.includes(c.definition)) {
+          // Fallback: build from stored fields
+          const parts = [];
+          if (c.definition) parts.push(c.definition);
+          if (c.example) parts.push(`Context: ${c.example}`);
+          back = parts.join("\n\n") || c.front;
+        }
+        return { id: c.id, _id: c.id, front: c.front, back, box: c.box, dueAt: c.due_at };
+      }));
     }
     if (req.method === "GET" && path === "/api/cards/due-count") {
       const n = await q1("SELECT COUNT(*)::int AS n FROM anki_cards WHERE user_id = $1 AND due_at <= $2", [uid, now()]);
