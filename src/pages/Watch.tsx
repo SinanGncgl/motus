@@ -635,7 +635,30 @@ function WatchContent({ id }: { id: string }) {
     setIsAttaching(true);
     setAttachError(null);
     setAttachErrorCode(null);
+    setGrabProgress(null);
     try {
+      // Step 1: Try YouTube's built-in captions (instant, no download needed)
+      setGrabProgress({ stage: "transcribing", note: "Checking for YouTube captions…" });
+      try {
+        const ytCaptions = await localApi.transcript(videoId, attachLang);
+        if (ytCaptions.lines && ytCaptions.lines.length > 0) {
+          await localApi.subtitles.update(subtitle._id, {
+            videoId,
+            language: attachLang,
+            lines: ytCaptions.lines,
+          });
+          setAttachUrl("");
+          toast.success(
+            `YouTube captions loaded (${ytCaptions.lines.length} lines) — no download needed!`,
+          );
+          return;
+        }
+      } catch {
+        // No YouTube captions available — fall through to Whisper
+      }
+
+      // Step 2: No YouTube captions — download audio and transcribe with Whisper
+      setGrabProgress(null);
       const file = await grabYouTubeAudioStream(attachUrl, setGrabProgress);
       setGrabProgress({ stage: "decoding" });
       const result = await transcribeFile(file, {
@@ -668,42 +691,63 @@ function WatchContent({ id }: { id: string }) {
     setAttachError(null);
     setAttachErrorCode(null);
     setIsGrabbing(true);
+    setGrabProgress(null);
     try {
+      const videoId = extractYouTubeId(attachUrl);
+
+      // Step 1: Try YouTube's built-in captions
+      if (videoId) {
+        setGrabProgress({ stage: "transcribing", note: "Checking for YouTube captions…" });
+        try {
+          const ytCaptions = await localApi.transcript(videoId, attachLang);
+          if (ytCaptions.lines && ytCaptions.lines.length > 0) {
+            await localApi.subtitles.update(subtitle._id, {
+              videoId,
+              language: attachLang,
+              lines: ytCaptions.lines,
+            });
+            setAttachUrl("");
+            toast.success(
+              `YouTube captions loaded (${ytCaptions.lines.length} lines) — no download needed!`,
+            );
+            return;
+          }
+        } catch {
+          // No YouTube captions — fall through to Whisper
+        }
+      }
+
+      // Step 2: Download audio and transcribe with Whisper
+      setGrabProgress(null);
       const file = await grabYouTubeAudioStream(attachUrl, setGrabProgress);
       const result = await transcribeFile(file, {
         language: attachLang,
         model: attachModel,
         onProgress: setGrabProgress,
       });
-      setGrabProgress({ stage: "loading" });
       const { storageId } = await localApi.upload(file);
       await localApi.subtitles.update(subtitle._id, {
+        videoId: videoId ?? undefined,
         fileId: storageId,
+        fileName: file.name,
         language: attachLang,
         lines: result.lines,
-        fileName: file.name,
       });
       setAttachUrl("");
       toast.success(
-        `Transcribed ${result.lines.length} lines — tap any word to save it`,
+        `Audio downloaded and transcribed (${result.lines.length} lines) — enjoy!`,
       );
     } catch (error) {
-      let message: string;
-      if (error instanceof Error && error.message === "UPLOAD_FAILED") {
-        message = "Couldn't save the audio — try again.";
-      } else if (
-        error instanceof Error &&
-        (error.message.startsWith("GRAB") || error.message.startsWith("YTDLP"))
-      ) {
-        message = grabErrorMessage(error);
+      const msg = grabErrorMessage(error);
+      if (msg.includes("UPLOAD_FAILED")) {
+        setAttachErrorCode("UPLOAD_FAILED");
+        setAttachError("Audio was transcribed but couldn't be saved — try again.");
       } else {
-        message = transcribeErrorMessage(error);
+        setAttachErrorCode("GRAB_FAILED");
+        setAttachError(msg);
       }
-      setAttachError(message);
-      setAttachErrorCode("GRAB_FAILED");
     } finally {
       setIsGrabbing(false);
-      setGrabProgress(null);
     }
   };
 
