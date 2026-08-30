@@ -28,6 +28,7 @@ import { parseSubtitleText, type SubtitleLine } from "@/lib/subtitles";
 import {
   transcribeErrorMessage,
   transcribeFile,
+  type TranscribeModel,
   type TranscribeProgress,
 } from "@/lib/transcribe";
 import { LANGUAGES } from "@/lib/tts";
@@ -95,6 +96,7 @@ export function NewSubtitleDialog({
   const [grabProgress, setGrabProgress] = useState<TranscribeProgress | null>(
     null,
   );
+  const [whisperModel, setWhisperModel] = useState<TranscribeModel>("best");
 
   const videoId = youtubeUrl.trim()
     ? (extractYouTubeId(youtubeUrl) ?? null)
@@ -197,6 +199,7 @@ export function NewSubtitleDialog({
       const file = await grabYouTubeAudioStream(youtubeUrl, setGrabProgress);
       const result = await transcribeFile(file, {
         language,
+        model: whisperModel,
         onProgress: setGrabProgress,
       });
 
@@ -232,7 +235,7 @@ export function NewSubtitleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add subtitles</DialogTitle>
           <DialogDescription>
@@ -286,7 +289,7 @@ export function NewSubtitleDialog({
             ))}
           </div>
           {mode === "youtube" && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="subtitle-youtube">YouTube link</Label>
                 <div className="relative">
@@ -300,20 +303,35 @@ export function NewSubtitleDialog({
                   />
                 </div>
               </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="subtitle-language">Language</Label>
-                <Select value={language} onValueChange={setLanguage}>
-                  <SelectTrigger id="subtitle-language" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LANGUAGES.map((l) => (
-                      <SelectItem key={l.code} value={l.code}>
-                        {l.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="subtitle-language">Language</Label>
+                  <Select value={language} onValueChange={setLanguage}>
+                    <SelectTrigger id="subtitle-language" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LANGUAGES.map((l) => (
+                        <SelectItem key={l.code} value={l.code}>
+                          {l.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="subtitle-whisper-model">Whisper model</Label>
+                  <Select value={whisperModel} onValueChange={(v) => setWhisperModel(v as TranscribeModel)}>
+                    <SelectTrigger id="subtitle-whisper-model" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                    <SelectItem value="fast">Fast (tiny)</SelectItem>
+                    <SelectItem value="accurate">Accurate (base)</SelectItem>
+                    <SelectItem value="best">Best (large-v3)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           )}
@@ -332,18 +350,20 @@ export function NewSubtitleDialog({
                     {grabProgress
                       ? GRAB_STAGE_LABELS[grabProgress.stage]
                       : "Grabbing audio from YouTube…"}
-                    {grabProgress?.stage === "downloading" &&
-                      grabProgress.percent !== undefined && (
-                        <span className="ml-auto tabular-nums text-foreground/70">
-                          {grabProgress.percent}%
-                        </span>
-                      )}
+                    {grabProgress?.percent !== undefined && (
+                      <span className="ml-auto tabular-nums text-foreground/70">
+                        {grabProgress.percent}%
+                      </span>
+                    )}
                   </div>
-                  {grabProgress?.stage === "downloading" && (
+                  {(grabProgress?.stage === "downloading" || grabProgress?.stage === "transcribing") && grabProgress.percent !== undefined && (
                     <Progress
-                      value={grabProgress.percent ?? 0}
+                      value={grabProgress.percent}
                       className="h-1.5"
                     />
+                  )}
+                  {grabProgress?.note && (
+                    <p className="text-[11px] text-muted-foreground truncate">{grabProgress.note}</p>
                   )}
                 </div>
               ) : (

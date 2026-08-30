@@ -20,19 +20,6 @@ echo "==> Clean build"
 rm -rf dist
 bun run build
 
-echo "==> Copying Whisper model into dist (no symlinks)"
-mkdir -p "$DIST_DIR/models/v1/onnx-community"
-rm -rf "$DIST_DIR/models/v1/onnx-community/whisper-tiny"
-cp -R public/models/onnx-community/whisper-tiny "$DIST_DIR/models/v1/onnx-community/whisper-tiny"
-# Also copy whisper-base if present
-if [[ -d "public/models/onnx-community/whisper-base" ]]; then
-  rm -rf "$DIST_DIR/models/v1/onnx-community/whisper-base"
-  cp -R public/models/onnx-community/whisper-base "$DIST_DIR/models/v1/onnx-community/whisper-base"
-  echo "    whisper-base model copied"
-fi
-SYMLINKS=$(find "$DIST_DIR/models/v1" -type l | wc -l | tr -d ' ')
-echo "    model symlinks in dist: $SYMLINKS (should be 0)"
-
 echo "==> Starting grab server (port $GRAB_PORT)"
 GRAB_COOKIES_FROM_BROWSER=chrome PORT="$GRAB_PORT" \
   nohup node grab-server.mjs > /tmp/motus-grab.log 2>&1 &

@@ -35,6 +35,50 @@ export const localApi = {
   dictionary: (word: string) => request<{ definition: string; example: string } | null>("/api/dictionary", { method: "POST", body: JSON.stringify({ word }) }),
   upload: async (file: File) => { const response = await fetch(`${BASE}/api/uploads`, { method: "POST", headers: headers({ "Content-Type": file.type || "application/octet-stream", "X-File-Name": file.name }), body: file }); if (!response.ok) throw new Error("UPLOAD_FAILED"); return response.json() as Promise<{ storageId: string; fileName: string }>; },
   grab: (url: string) => request<{ storageId: string; fileName: string; fileUrl: string }>("/api/grab", { method: "POST", body: JSON.stringify({ url }) }),
+  transcribeFile: (storageId: string, language?: string, model?: string) => request<{ lines: LocalLine[]; language: string }>("/api/transcribe-file", { method: "POST", body: JSON.stringify({ storageId, language, model }) }),
+  /** SSE-based transcription with progress events. */
+  transcribeFileSSE: (storageId: string, language: string | undefined, model: string | undefined, onProgress: (p: { status: string; percent?: number; message?: string; line_count?: number; current_text?: string }) => void): Promise<{ lines: LocalLine[]; language: string }> => {
+    const token = localStorage.getItem(SESSION_KEY);
+    return new Promise((resolve, reject) => {
+      fetch(`${BASE}/api/transcribe-file`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { "X-Local-Session": token } : {}) },
+        body: JSON.stringify({ storageId, language, model }),
+      }).then((resp) => {
+        if (!resp.ok) return resp.json().then((d) => { throw new Error(d.error || `HTTP ${resp.status}`); });
+        const reader = resp.body!.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        const process = () => {
+          reader.read().then(({ done, value }) => {
+            if (done) return;
+            buf += decoder.decode(value, { stream: true });
+            // Parse SSE events
+            const lines = buf.split("\n");
+            buf = lines.pop() || "";
+            let eventType = "";
+            let eventData = "";
+            for (const line of lines) {
+              if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+              else if (line.startsWith("data: ")) eventData = line.slice(6);
+              else if (line === "" && eventType && eventData) {
+                try {
+                  const parsed = JSON.parse(eventData);
+                  if (eventType === "done") { resolve(parsed); return; }
+                  if (eventType === "error") { reject(new Error(parsed.message || "Transcription failed")); return; }
+                  if (eventType === "progress") onProgress(parsed);
+                } catch { /* skip */ }
+                eventType = "";
+                eventData = "";
+              }
+            }
+            process();
+          }).catch(reject);
+        };
+        process();
+      }).catch(reject);
+    });
+  },
 };
 
 export { SESSION_KEY };

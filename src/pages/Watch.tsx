@@ -202,7 +202,7 @@ function WatchContent({ id }: { id: string }) {
   const [attachMode, setAttachMode] = useState<"youtube" | "file">("youtube");
   const [attachUrl, setAttachUrl] = useState("");
   const [attachLang, setAttachLang] = useState("en-US");
-  const [attachModel, setAttachModel] = useState<TranscribeModel>("accurate");
+  const [attachModel, setAttachModel] = useState<TranscribeModel>("best");
   const [transcribeMode, setTranscribeMode] = useState<"auto" | "youtube" | "whisper">("auto");
   const [isAttaching, setIsAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -379,6 +379,7 @@ function WatchContent({ id }: { id: string }) {
   }, [subtitle]);
 
   const openWord = (tokenWord: string, raw: string, lineText: string) => {
+    playerRef.current?.pauseVideo();
     if (!subtitle) return;
     const row = subtitle.lines.findIndex((l) => l.text === lineText);
     setSelection({
@@ -394,6 +395,7 @@ function WatchContent({ id }: { id: string }) {
   };
 
   const saveWordFromToken = (tokenWord: string, raw: string, lineText: string) => {
+    playerRef.current?.pauseVideo();
     if (!subtitle) return;
     void save({
       word: tokenWord,
@@ -1367,8 +1369,9 @@ function WatchContent({ id }: { id: string }) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="fast">Fast (tiny, ~75 MB)</SelectItem>
-                          <SelectItem value="accurate">Accurate (base, ~142 MB)</SelectItem>
+                           <SelectItem value="fast">Fast (tiny)</SelectItem>
+                           <SelectItem value="accurate">Accurate (base)</SelectItem>
+                           <SelectItem value="best">Best (large-v3)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1382,18 +1385,20 @@ function WatchContent({ id }: { id: string }) {
                             : isAttaching
                               ? "Downloading audio and transcribing…"
                               : "Working…"}
-                          {grabProgress?.stage === "downloading" &&
-                            grabProgress.percent !== undefined && (
-                              <span className="ml-auto tabular-nums text-foreground/70">
-                                {grabProgress.percent}%
-                              </span>
-                            )}
+                          {grabProgress?.percent !== undefined && (
+                            <span className="ml-auto tabular-nums text-foreground/70">
+                              {grabProgress.percent}%
+                            </span>
+                          )}
                         </div>
-                        {grabProgress?.stage === "downloading" && (
+                        {(grabProgress?.stage === "downloading" || grabProgress?.stage === "transcribing") && grabProgress.percent !== undefined && (
                           <Progress
-                            value={grabProgress.percent ?? 0}
+                            value={grabProgress.percent}
                             className="h-1.5"
                           />
+                        )}
+                        {grabProgress?.note && (
+                          <p className="text-[11px] text-muted-foreground truncate">{grabProgress.note}</p>
                         )}
                       </div>
                     )}

@@ -2,9 +2,10 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join, extname } from "node:path";
 import { homedir } from "node:os";
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import pg from "pg";
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -403,6 +404,66 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && path === "/api/transcript") { const a = await body(req); return send(res, 200, { videoId: a.videoId, lines: await transcript(a.videoId, a.lang) }); }
+
+    // Server-side Whisper transcription via faster-whisper (SSE progress)
+    if (req.method === "POST" && path === "/api/transcribe-file") {
+      const a = await body(req);
+      const filePath = join(UPLOAD_DIR, String(a.storageId || ""));
+      try { await readFile(filePath); } catch { return fail(res, 404, "File not found — upload first"); }
+      const MODEL_MAP = { fast: "tiny", accurate: "base", best: "large-v3-turbo" };
+      const modelSize = MODEL_MAP[a.model] || "base";
+      const lang = a.language && a.language !== "auto" ? a.language.split("-")[0] : "auto";
+      // Stream progress via SSE, final result as JSON on the "done" event
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+      });
+      const sse = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      let closed = false;
+      const finish = () => { if (!closed) { closed = true; res.end(); } };
+      req.on("close", () => { closed = true; });
+      const py = spawn("python3", [join(process.cwd(), "transcribe-server.py"), filePath, lang, modelSize], { windowsHide: true });
+      let buf = "";
+      py.stdout.on("data", (chunk) => {
+        buf += chunk.toString();
+        // Process complete JSON lines
+        let nl;
+        while ((nl = buf.indexOf("\n")) !== -1) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          try {
+            const msg = JSON.parse(line);
+            if (msg.status === "done") {
+              sse("done", { lines: msg.lines || [], language: msg.language });
+              finish();
+            } else {
+              sse("progress", msg);
+            }
+          } catch { /* partial line, ignore */ }
+        }
+      });
+      py.stderr.on("data", (d) => {
+        const txt = d.toString();
+        if (txt.includes("Downloading") || txt.includes("Downloading model")) {
+          sse("progress", { status: "loading", message: txt.trim().slice(0, 200) });
+        }
+        console.error("[transcribe]", txt.trim().slice(0, 200));
+      });
+      py.on("error", (err) => {
+        sse("error", { code: "TRANSCRIBE_FAILED", message: String(err.message || err) });
+        finish();
+      });
+      py.on("close", (code) => {
+        if (code !== 0 && !closed) {
+          sse("error", { code: "TRANSCRIBE_FAILED", message: `Whisper exited with code ${code}` });
+        }
+        finish();
+      });
+      return;
+    }
     if (req.method === "POST" && (path === "/grab" || path === "/api/grab")) {
       const a = await body(req);
       try {

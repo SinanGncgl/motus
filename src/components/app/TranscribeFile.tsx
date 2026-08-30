@@ -30,7 +30,7 @@ export function TranscribeFile({ language, onTranscribed, onError, className }: 
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<TranscribeProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [model, setModel] = useState<TranscribeModel>("fast");
+  const [model, setModel] = useState<TranscribeModel>("best");
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
@@ -62,6 +62,7 @@ export function TranscribeFile({ language, onTranscribed, onError, className }: 
           <SelectContent>
             <SelectItem value="fast">Fast (tiny)</SelectItem>
             <SelectItem value="accurate">Accurate (base)</SelectItem>
+            <SelectItem value="best">Best (large-v3)</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -73,7 +74,7 @@ export function TranscribeFile({ language, onTranscribed, onError, className }: 
             <p className="truncate text-sm font-medium">{STAGE_LABELS[busy.stage]}</p>
             {busy.note && <p className="mt-0.5 text-[11px] text-muted-foreground">{busy.note}</p>}
             {busy.stage === "downloading" && busy.percent !== undefined && <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${busy.percent}%` }} /></div>}
-            {busy.stage === "downloading" && <p className="mt-1 text-[11px] text-muted-foreground">One-time download (~{model === "accurate" ? "142" : "75"} MB), cached afterwards</p>}
+            {busy.stage === "downloading" && <p className="mt-1 text-[11px] text-muted-foreground">One-time download (~{model === "best" ? "3100" : model === "accurate" ? "280" : "145"} MB), cached afterwards</p>}
           </div>
         </div>
       ) : (
