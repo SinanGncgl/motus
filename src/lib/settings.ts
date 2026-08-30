@@ -18,6 +18,8 @@ export interface AppSettings {
   translationApiKey: string;
   /** Optional LibreTranslate-compatible endpoint for sentence translation. */
   translationEndpoint: string;
+  /** Translation service to use: "libretranslate" or "deepl". */
+  translationService: "libretranslate" | "deepl";
 }
 
 const KEY = "motus.settings.v1";
@@ -31,6 +33,7 @@ const DEFAULTS: AppSettings = {
   nativeLanguage: "en",
   translationApiKey: "",
   translationEndpoint: "",
+  translationService: "libretranslate",
 };
 
 function read(): AppSettings {

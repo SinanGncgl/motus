@@ -9,6 +9,7 @@
 //   2. A user-configured endpoint/key from Settings (self-hosted).
 
 import { settings } from "@/lib/settings";
+import { translateViaDeepL } from "./deepl";
 
 export interface TranslateResult {
   ok: boolean;
@@ -77,10 +78,19 @@ export async function translateLine(
   targetLang = "en",
   sourceLang = "auto",
 ): Promise<TranslateResult> {
+  const { translationService } = settings.get();
+
+  // DeepL is preferred when selected and key is provided
+  if (translationService === "deepl") {
+    const deepl = await translateViaDeepL(text, targetLang, sourceLang);
+    if (deepl.ok) return deepl;
+    // Fall through to LibreTranslate if DeepL fails
+  }
+
   // Server proxy first (no key in the browser, no CORS). Fall back to a
   // user-configured endpoint if the proxy isn't set up.
   const server = await translateViaServer(text, targetLang, sourceLang);
   if (server.ok) return server;
-  if (server.error !== "not-configured") return server; // real error, don't mask
+  if (server.error !== "not-configured") return server;
   return translateViaEndpoint(text, targetLang, sourceLang);
 }

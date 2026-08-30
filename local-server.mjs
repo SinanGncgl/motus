@@ -535,6 +535,36 @@ const server = createServer(async (req, res) => {
         return send(res, 502, { error: "TRANSLATE_UPSTREAM", message: e instanceof Error ? e.message : "upstream error", hint: `Is LibreTranslate running at ${LIBRETRANSLATE_URL}? (try: pip install libretranslate && libretranslate)` });
       }
     }
+    // DeepL translation proxy (free API: api-free.deepl.com)
+    if (req.method === "POST" && path === "/api/translate-deepl") {
+      const a = await body(req);
+      const deeplKey = a.api_key || "";
+      if (!deeplKey) {
+        return send(res, 400, { error: "NO_DEEPL_KEY", message: "Set a DeepL API key in Settings" });
+      }
+      try {
+        const isFree = deeplKey.endsWith(":fx");
+        const baseUrl = isFree ? "https://api-free.deepl.com" : "https://api.deepl.com";
+        const deeplRes = await fetch(`${baseUrl}/v2/translate`, {
+          method: "POST",
+          headers: {
+            "Authorization": `DeepL-Auth-Key ${deeplKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            text: [a.q],
+            source_lang: (a.source ?? "auto").toUpperCase().slice(0, 2),
+            target_lang: (a.target ?? "EN").toUpperCase().slice(0, 2),
+          }),
+        });
+        const data = await deeplRes.json().catch(() => ({}));
+        if (!deeplRes.ok) return send(res, deeplRes.status, { error: "DEEPL_FAILED", message: data?.message ?? `HTTP ${deeplRes.status}` });
+        const translated = data?.translations?.[0]?.text ?? "";
+        return send(res, 200, { translatedText: translated });
+      } catch (e) {
+        return send(res, 502, { error: "DEEPL_UPSTREAM", message: e instanceof Error ? e.message : "upstream error" });
+      }
+    }
     return fail(res, 404, "Not found");
   } catch (e) {
     console.error(e);

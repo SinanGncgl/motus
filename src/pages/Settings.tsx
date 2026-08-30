@@ -30,6 +30,7 @@ export default function Settings() {
   const [nativeLang, setNativeLang] = useState(settings.get().nativeLanguage);
   const [apiKey, setApiKey] = useState(settings.get().translationApiKey);
   const [endpoint, setEndpoint] = useState(settings.get().translationEndpoint);
+  const [translationSvc, setTranslationSvc] = useState(settings.get().translationService);
 
   const save = () => {
     settings.update({
@@ -41,6 +42,7 @@ export default function Settings() {
       nativeLanguage: nativeLang,
       translationApiKey: apiKey.trim(),
       translationEndpoint: endpoint.trim(),
+      translationService: translationSvc,
     });
     toast.success("Settings saved");
   };
@@ -180,6 +182,27 @@ export default function Settings() {
       </div>
 
       <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm">
+        <h2 className="text-base font-semibold">Translation</h2>
+        <div className="flex flex-col gap-2 rounded-xl border bg-card/60 p-3">
+          <Label>Translation service</Label>
+          <Select value={translationSvc} onValueChange={(v) => setTranslationSvc(v as "libretranslate" | "deepl")}>
+            <SelectTrigger className="w-full sm:w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="libretranslate">LibreTranslate (local, free)</SelectItem>
+              <SelectItem value="deepl">DeepL (higher quality)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            DeepL produces much better translations. Get a free API key at{" "}
+            <a href="https://www.deepl.com/pro-api" target="_blank" rel="noreferrer" className="underline">deepl.com</a>{" "}
+            (500k chars/month free). The API key field below is used for DeepL when selected.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm">
         <h2 className="text-base font-semibold">Online enhancements</h2>
         <div className="flex flex-col gap-2">
           <Label htmlFor="tkey">
@@ -194,9 +217,8 @@ export default function Settings() {
             className="font-mono text-xs"
           />
           <p className="text-xs text-muted-foreground">
-            Used only when you ask to translate a sentence or look up a rare
-            word. Without it, the app works fully offline with the built-in
-            starter dictionary.
+            For DeepL: paste your free API key here. For LibreTranslate: leave empty (uses local instance). Get a DeepL key at{" "}
+            <a href="https://www.deepl.com/pro-api" target="_blank" rel="noreferrer" className="underline">deepl.com</a>.
           </p>
         </div>
         <div className="flex flex-col gap-2 border-t border-border/60 pt-4">
