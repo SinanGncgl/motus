@@ -64,13 +64,10 @@ export function whisperLanguage(code?: string): string | undefined {
 
 export type TranscribeModel = "fast" | "accurate";
 
-// int8-quantized multilingual Whisper models, biggest first. If one fails to
-// load (network/DNS issues), we degrade down the chain so the user still gets
-// a transcript instead of an error.
-// Local-only setup: only whisper-tiny is bundled under /models/v1/, and
-// allowRemoteModels is disabled, so the chain must not reference models that
-// aren't present locally (base/small) — doing so throws MODEL_DOWNLOAD_FAILED
-// before the tiny fallback can run.
+// Whisper models in priority order. If one fails to load (network/DNS issues),
+// we degrade down the chain so the user still gets a transcript.
+// The "accurate" chain includes whisper-base with remote fallback — on first
+// use it downloads from HuggingFace (~142 MB), then the browser caches it.
 const MODEL_CHAIN: Record<TranscribeModel, string[]> = {
   fast: ["onnx-community/whisper-tiny"],
   accurate: ["onnx-community/whisper-base", "onnx-community/whisper-tiny"],
@@ -131,48 +128,53 @@ async function createTranscriber(model: string): Promise<unknown> {
   // Prefer a model bundled by the local Docker image, then use the public
   // hubs as a fallback for development installs.
   let lastError: unknown;
-  for (const host of [LOCAL_MODEL_HOST, DEFAULT_HOST, MIRROR_HOST]) {
-    if (host !== LOCAL_MODEL_HOST) {
-      env.remoteHost = host;
-      env.allowRemoteModels = true;
+  const prevAllowRemote = env.allowRemoteModels;
+  try {
+    for (const host of [LOCAL_MODEL_HOST, DEFAULT_HOST, MIRROR_HOST]) {
+      if (host !== LOCAL_MODEL_HOST) {
+        env.remoteHost = host;
+        env.allowRemoteModels = true;
+      }
+      try {
+        return await pipeline("automatic-speech-recognition", model, {
+          dtype: "fp16",
+          // Force a fresh model cache entry. transformers.js keys its Cache
+          // Storage model cache by model id + revision (not the local path), so
+          // a corrupt cached model from an earlier broken state would otherwise
+          // be reused forever and the load would fail without ever hitting the
+          // server. Bumping the revision invalidates that cache.
+          revision: "motus-local-v3",
+          progress_callback: (p: {
+            status?: string;
+            loaded?: number;
+            total?: number;
+          }) => {
+            if (!progressHandler) return;
+            if (
+              p.status === "progress" &&
+              typeof p.loaded === "number" &&
+              typeof p.total === "number" &&
+              p.total > 0
+            ) {
+              progressHandler({
+                stage: "downloading",
+                percent: Math.min(
+                  100,
+                  Math.round((p.loaded / p.total) * 100),
+                ),
+              });
+            } else if (p.status === "ready") {
+              progressHandler({ stage: "loading" });
+            }
+          },
+        });
+      } catch (error) {
+        lastError = error;
+        console.error("[Motus] model load failed for", model, "→", error);
+      }
     }
-    try {
-      return await pipeline("automatic-speech-recognition", model, {
-        dtype: "fp16",
-        // Force a fresh model cache entry. transformers.js keys its Cache
-        // Storage model cache by model id + revision (not the local path), so
-        // a corrupt cached model from an earlier broken state would otherwise
-        // be reused forever and the load would fail without ever hitting the
-        // server. Bumping the revision invalidates that cache.
-        revision: "motus-local-v3",
-        progress_callback: (p: {
-          status?: string;
-          loaded?: number;
-          total?: number;
-        }) => {
-          if (!progressHandler) return;
-          if (
-            p.status === "progress" &&
-            typeof p.loaded === "number" &&
-            typeof p.total === "number" &&
-            p.total > 0
-          ) {
-            progressHandler({
-              stage: "downloading",
-              percent: Math.min(
-                100,
-                Math.round((p.loaded / p.total) * 100),
-              ),
-            });
-          } else if (p.status === "ready") {
-            progressHandler({ stage: "loading" });
-          }
-        },
-      });
-    } catch (error) {
-      lastError = error;
-      console.error("[Motus] model load failed for", model, "→", error);
-    }
+  } finally {
+    env.allowRemoteModels = prevAllowRemote;
   }
   // Surface the real underlying cause (which file/URL failed) instead of the
   // generic Hugging Face message, so failures are debuggable in the console.

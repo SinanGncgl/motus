@@ -73,7 +73,7 @@ export function TranscribeFile({ language, onTranscribed, onError, className }: 
             <p className="truncate text-sm font-medium">{STAGE_LABELS[busy.stage]}</p>
             {busy.note && <p className="mt-0.5 text-[11px] text-muted-foreground">{busy.note}</p>}
             {busy.stage === "downloading" && busy.percent !== undefined && <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${busy.percent}%` }} /></div>}
-            {busy.stage === "downloading" && <p className="mt-1 text-[11px] text-muted-foreground">One-time download (~75 MB), cached afterwards</p>}
+            {busy.stage === "downloading" && <p className="mt-1 text-[11px] text-muted-foreground">One-time download (~{model === "accurate" ? "142" : "75"} MB), cached afterwards</p>}
           </div>
         </div>
       ) : (
