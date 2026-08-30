@@ -11,4 +11,6 @@ export interface PlayerHandle {
   getDuration?(): number;
   /** Set playback speed (0.5, 1, 1.25, …). Optional; may be a no-op. */
   setPlaybackRate?(rate: number): void;
+  /** Return the underlying <video> element for frame capture, if available. */
+  getInternalPlayer(): HTMLVideoElement | null;
 }

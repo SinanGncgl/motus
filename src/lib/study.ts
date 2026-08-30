@@ -13,6 +13,8 @@ export interface SaveWordInput {
   example?: string;
   sourceTitle?: string;
   language?: string;
+  translation?: string; // sentence translation for card back
+  screenshot?: Blob; // video frame capture
 }
 
 /**
@@ -32,14 +34,21 @@ export async function saveWord(input: SaveWordInput): Promise<{
     return { skipped: true, saved: false };
   }
   try {
-    await localApi.words.save({
+    const result = await localApi.words.save({
       word: input.word,
       display: input.display,
       definition: input.definition ?? "",
       example: input.example ?? "",
       sourceTitle: input.sourceTitle,
       language: input.language,
+      translation: input.translation ?? "",
     });
+    // Upload screenshot if provided (non-blocking — word is already saved)
+    if (input.screenshot && result.wordId) {
+      localApi.words.uploadScreenshot(result.wordId, input.screenshot).catch(() => {
+        // Screenshot upload is best-effort; don't block word save
+      });
+    }
     return { skipped: false, saved: true };
   } catch {
     toast.error("Could not save the word.");

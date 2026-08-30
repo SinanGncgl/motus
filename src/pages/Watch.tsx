@@ -265,14 +265,18 @@ function WatchContent({ id }: { id: string }) {
     }
   }, [activeRow, transcriptOpen]);
 
-  // Translate a line on demand (cached). No-op without an endpoint.
+  // Translate a line on demand (cached). The server proxy (/api/translate)
+  // handles the unconfigured case gracefully, so we don't gate on a local
+  // endpoint here.
   const translateRow = (row: number) => {
     const line = subtitle?.lines[row];
-    if (!line || !settings.get().translationEndpoint) return;
+    if (!line) return;
     if (translations[row] !== undefined || translatingRows.has(row)) return;
     setTranslatingRows((prev) => new Set(prev).add(row));
     const target = settings.get().nativeLanguage.slice(0, 2);
-    translateLine(line.text, target)
+    const userSource = settings.get().sourceLanguage;
+    const source = userSource !== "auto" ? userSource : (subtitle?.language?.slice(0, 2) || "auto");
+    translateLine(line.text, target, source)
       .then((r) => {
         if (r.ok && r.text) {
           setTranslations((prev) => ({ ...prev, [row]: r.text }) as Record<number, string>);
@@ -363,12 +367,15 @@ function WatchContent({ id }: { id: string }) {
 
   const openWord = (tokenWord: string, raw: string, lineText: string) => {
     if (!subtitle) return;
+    const row = subtitle.lines.findIndex((l) => l.text === lineText);
     setSelection({
       word: tokenWord,
       display: raw,
       example: lineText,
       sourceTitle: subtitle.title,
       language: subtitle.language,
+      translation: row >= 0 ? translations[row] : undefined,
+      contextSentence: lineText,
     });
     setWordDialogOpen(true);
   };
@@ -1485,6 +1492,7 @@ function WatchContent({ id }: { id: string }) {
                                 : toast.error("Couldn't copy to clipboard"),
                             );
                           }}
+                          onTranslate={() => translateRow(i)}
                           saved={false}
                         />
                       );
@@ -1567,6 +1575,7 @@ function WatchContent({ id }: { id: string }) {
         onOpenChange={setWordDialogOpen}
         selection={selection}
         existing={selection ? (existing(selection.word) ?? null) : null}
+        videoRef={playerRef}
       />
 
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>

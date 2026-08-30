@@ -11,13 +11,25 @@ const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? "0.0.0.0";
 const DATA_DIR = process.env.DATA_DIR ?? join(homedir(), ".motus");
 const UPLOAD_DIR = join(DATA_DIR, "uploads");
+const SCREENSHOTS_DIR = join(DATA_DIR, "screenshots");
 const DIST_DIR = process.env.DIST_DIR ?? join(process.cwd(), "dist");
 const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://sinang@127.0.0.1:5432/motus";
 const MAX_BODY = 60 * 1024 * 1024;
 // Base the app uses to reach the local server (same-origin in the browser).
 const GRAB_BASE = process.env.GRAB_BASE ?? "";
+// Optional LibreTranslate server. Defaults to a self-hosted instance on
+// localhost:5000 (started via `libretranslate`), so translation works with zero
+// config. Override with LIBRETRANSLATE_URL. The API key stays server-side.
+const LIBRETRANSLATE_URL = (
+  process.env.LIBRETRANSLATE_URL ?? "http://127.0.0.1:5001"
+).replace(/\/+$/, "");
+// Optional API key. The bundled self-hosted launch runs LibreTranslate WITHOUT
+// --api-keys (open access, local-only), so no key is needed by default. Set
+// LIBRETRANSLATE_KEY only when pointing at a managed/keyed instance.
+const LIBRETRANSLATE_KEY = process.env.LIBRETRANSLATE_KEY ?? "";
 
 await mkdir(UPLOAD_DIR, { recursive: true });
+await mkdir(SCREENSHOTS_DIR, { recursive: true });
 const pool = new pg.Pool({ connectionString: DATABASE_URL });
 
 const SCHEMA = `
@@ -74,6 +86,13 @@ CREATE INDEX IF NOT EXISTS idx_card_word ON anki_cards(saved_word_id);
 
 const id = (p) => `${p}_${randomUUID()}`;
 const now = () => Date.now();
+function formatCardBack(a, fallbackWord) {
+  const parts = [];
+  if (a.definition) parts.push(a.definition);
+  if (a.example) parts.push(`Context: ${a.example}`);
+  if (a.translation) parts.push(`Translation: ${a.translation}`);
+  return parts.join("\n\n") || fallbackWord;
+}
 
 // Initialize schema + seed default user.
 await pool.query(SCHEMA);
@@ -198,6 +217,20 @@ const server = createServer(async (req, res) => {
   const u = new URL(req.url, `http://${req.headers.host}`);
   const path = u.pathname;
   try {
+    // Serve word screenshots
+    if (req.method === "GET" && path.startsWith("/api/screenshots/")) {
+      const fileName = path.slice("/api/screenshots/".length);
+      if (!fileName || fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) return fail(res, 400, "Invalid path");
+      const filePath = join(SCREENSHOTS_DIR, fileName);
+      try {
+        const data = await readFile(filePath);
+        cors(res);
+        res.writeHead(200, { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" });
+        return res.end(data);
+      } catch {
+        return fail(res, 404, "Screenshot not found");
+      }
+    }
     if (!path.startsWith("/api/") && !path.startsWith("/grab") && path !== "/health") return staticFile(res, path);
     if (req.method === "GET" && (path === "/health" || path === "/api/health")) return send(res, 200, { ok: true, local: true, ytDlp: true, db: "postgres", dbUrl: DATABASE_URL });
     if (req.method === "POST" && path === "/api/auth/guest") {
@@ -268,7 +301,7 @@ const server = createServer(async (req, res) => {
         await q("UPDATE saved_words SET display=$1, definition=$2, example=$3, source_title=$4, language=$5, updated_at=$6 WHERE id=$7",
           [a.display || existing.display || word, a.definition || existing.definition || "", a.example || existing.example || "", a.sourceTitle ?? existing.source_title ?? null, a.language ?? existing.language ?? null, now(), existing.id]);
         const c = await q1("SELECT id FROM anki_cards WHERE saved_word_id = $1", [existing.id]);
-        if (c) await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [a.display || existing.display || word, [a.definition, a.example].filter(Boolean).join("\n\n") || a.display || existing.display || word, c.id]);
+        if (c) await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [a.display || existing.display || word, formatCardBack(a, existing.display || word), c.id]);
         return send(res, 200, { wordId: existing.id, created: false });
       }
       const wid = id("word");
@@ -276,7 +309,7 @@ const server = createServer(async (req, res) => {
         [wid, uid, word, a.display || word, a.definition || "", a.example || "", a.sourceTitle ?? null, a.language ?? null, now(), now()]);
       const cid = id("card");
       await q("INSERT INTO anki_cards (id,user_id,saved_word_id,front,back,box,due_at,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-        [cid, uid, wid, a.display || word, [a.definition, a.example].filter(Boolean).join("\n\n") || a.display || word, 0, now(), now()]);
+        [cid, uid, wid, a.display || word, formatCardBack(a, a.display || word), 0, now(), now()]);
       return send(res, 200, { wordId: wid, created: true });
     }
     if (p[0] === "api" && p[1] === "words" && p[2]) {
@@ -298,7 +331,7 @@ const server = createServer(async (req, res) => {
           if (upd.resetCard) {
             await q("UPDATE anki_cards SET box=0, due_at=$1, last_reviewed_at=NULL WHERE id=$2", [now(), c.id]);
           } else {
-            await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [upd.display || w.display, [upd.definition, upd.example].filter(Boolean).join("\n\n") || upd.display || w.display, c.id]);
+            await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [upd.display || w.display, formatCardBack(upd, w.display), c.id]);
           }
         }
         return send(res, 200, { ok: true });
@@ -306,6 +339,18 @@ const server = createServer(async (req, res) => {
       if (req.method === "DELETE") {
         await q("DELETE FROM anki_cards WHERE saved_word_id = $1", [p[2]]);
         await q("DELETE FROM saved_words WHERE id = $1 AND user_id = $2", [p[2], uid]);
+        unlink(join(SCREENSHOTS_DIR, `${p[2]}.jpg`)).catch(() => {});
+        return send(res, 200, { ok: true });
+      }
+      // Screenshot upload for a saved word
+      if (req.method === "POST" && p[0] === "api" && p[1] === "words" && p[2] && p[3] === "screenshot") {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const buf = Buffer.concat(chunks);
+        if (buf.length > 2 * 1024 * 1024) return fail(res, 413, "Screenshot too large (max 2MB)");
+        const safeId = p[2].replace(/[^a-zA-Z0-9_-]/g, "");
+        const filePath = join(SCREENSHOTS_DIR, `${safeId}.jpg`);
+        await writeFile(filePath, buf);
         return send(res, 200, { ok: true });
       }
     }
@@ -439,6 +484,30 @@ const server = createServer(async (req, res) => {
         const m = d?.[0]?.meanings?.[0];
         return send(res, 200, { definition: m?.definitions?.[0]?.definition || "", example: m?.definitions?.find((x) => x.example)?.example || "" });
       } catch { return send(res, 200, null); }
+    }
+    // Proxy sentence translation to the LibreTranslate server (defaults to a
+    // self-hosted instance on localhost:5000). The API key never reaches the
+    // browser and CORS is a non-issue.
+    if (req.method === "POST" && path === "/api/translate") {
+      const a = await body(req);
+      try {
+        const r = await fetch(`${LIBRETRANSLATE_URL}/translate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            q: a.q,
+            source: a.source ?? "auto",
+            target: a.target ?? "en",
+            format: a.format ?? "text",
+            ...(LIBRETRANSLATE_KEY ? { api_key: LIBRETRANSLATE_KEY } : {}),
+          }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) return send(res, r.status, { error: "TRANSLATE_FAILED", message: data?.error ?? `HTTP ${r.status}` });
+        return send(res, 200, { translatedText: data.translatedText ?? "" });
+      } catch (e) {
+        return send(res, 502, { error: "TRANSLATE_UPSTREAM", message: e instanceof Error ? e.message : "upstream error", hint: `Is LibreTranslate running at ${LIBRETRANSLATE_URL}? (try: pip install libretranslate && libretranslate)` });
+      }
     }
     return fail(res, 404, "Not found");
   } catch (e) {

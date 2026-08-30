@@ -56,7 +56,14 @@ export function YouTubePlayer({
           events: {
             onReady: (event) => {
               if (disposed) return;
-              playerRef.current = event.target;
+              const yt = event.target;
+              playerRef.current = {
+                seekTo: (s) => yt.seekTo(s, true),
+                playVideo: () => yt.playVideo(),
+                pauseVideo: () => yt.pauseVideo(),
+                getCurrentTime: () => yt.getCurrentTime(),
+                getInternalPlayer: () => null,
+              };
               onReadyRef.current?.();
             },
             onStateChange: (event) => {
