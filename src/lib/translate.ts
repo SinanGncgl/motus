@@ -10,6 +10,7 @@
 
 import { settings } from "@/lib/settings";
 import { translateViaDeepL } from "./deepl";
+import { getCachedTranslation, setCachedTranslation } from "./translation-cache";
 
 export interface TranslateResult {
   ok: boolean;
@@ -78,19 +79,32 @@ export async function translateLine(
   targetLang = "en",
   sourceLang = "auto",
 ): Promise<TranslateResult> {
+  // Check cache first
+  const cached = getCachedTranslation(text, sourceLang, targetLang);
+  if (cached !== null) return { ok: true, text: cached };
+
   const { translationService } = settings.get();
 
-  // DeepL is preferred when selected and key is provided
+  let result: TranslateResult | null = null;
+
   if (translationService === "deepl") {
-    const deepl = await translateViaDeepL(text, targetLang, sourceLang);
-    if (deepl.ok) return deepl;
-    // Fall through to LibreTranslate if DeepL fails
+    result = await translateViaDeepL(text, targetLang, sourceLang);
+    if (result.ok) {
+      setCachedTranslation(text, sourceLang, targetLang, result.text!);
+      return result;
+    }
   }
 
-  // Server proxy first (no key in the browser, no CORS). Fall back to a
-  // user-configured endpoint if the proxy isn't set up.
   const server = await translateViaServer(text, targetLang, sourceLang);
-  if (server.ok) return server;
+  if (server.ok) {
+    setCachedTranslation(text, sourceLang, targetLang, server.text!);
+    return server;
+  }
   if (server.error !== "not-configured") return server;
-  return translateViaEndpoint(text, targetLang, sourceLang);
+
+  const endpoint = await translateViaEndpoint(text, targetLang, sourceLang);
+  if (endpoint.ok) {
+    setCachedTranslation(text, sourceLang, targetLang, endpoint.text!);
+  }
+  return endpoint;
 }

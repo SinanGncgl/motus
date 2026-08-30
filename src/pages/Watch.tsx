@@ -8,6 +8,7 @@ import { TranscriptLine } from "@/components/app/TranscriptLine";
 import { WordTooltip } from "@/components/app/WordTooltip";
 import { saveWord } from "@/lib/study";
 import { translateLine } from "@/lib/translate";
+import { getCachedTranslation } from "@/lib/translation-cache";
 import { Languages } from "lucide-react";
 import { WordDialog, type WordSelection } from "@/components/app/WordDialog";
 import { YouTubePlayer } from "@/components/app/YouTubePlayer";
@@ -275,10 +276,18 @@ function WatchContent({ id }: { id: string }) {
     const line = subtitle?.lines[row];
     if (!line) return;
     if (translations[row] !== undefined || translatingRows.has(row)) return;
-    setTranslatingRows((prev) => new Set(prev).add(row));
     const target = translateTarget.slice(0, 2);
     const userSource = settings.get().sourceLanguage;
     const source = userSource !== "auto" ? userSource : (subtitle?.language?.slice(0, 2) || "auto");
+
+    // Check cache first — instant if already translated
+    const cached = getCachedTranslation(line.text, source, target);
+    if (cached !== null) {
+      setTranslations((prev) => ({ ...prev, [row]: cached }) as Record<number, string>);
+      return;
+    }
+
+    setTranslatingRows((prev) => new Set(prev).add(row));
     translateLine(line.text, target, source)
       .then((r) => {
         if (r.ok && r.text) {
