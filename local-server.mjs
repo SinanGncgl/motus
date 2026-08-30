@@ -154,7 +154,8 @@ async function words(uid) {
   const ws = await q("SELECT * FROM saved_words WHERE user_id = $1 ORDER BY updated_at DESC", [uid]);
   return Promise.all(ws.rows.map(async (w) => {
     const c = await q1("SELECT box, due_at FROM anki_cards WHERE saved_word_id = $1", [w.id]);
-    return { _id: w.id, word: w.word, display: w.display, definition: w.definition, example: w.example, sourceTitle: w.source_title ?? undefined, language: w.language ?? undefined, cardBox: c?.box ?? 0, cardDueAt: c?.due_at ?? null };
+    const hasScreenshot = existsSync(join(SCREENSHOTS_DIR, `${w.id}.jpg`));
+    return { _id: w.id, word: w.word, display: w.display, definition: w.definition, example: w.example, sourceTitle: w.source_title ?? undefined, language: w.language ?? undefined, translation: w.translation ?? undefined, screenshotUrl: hasScreenshot ? `/api/screenshots/${w.id}.jpg` : undefined, cardBox: c?.box ?? 0, cardDueAt: c?.due_at ?? null };
   }));
 }
 async function cards(uid) {
@@ -360,7 +361,7 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "GET" && path === "/api/cards/due") {
       const due = await q(
-        `SELECT c.id, c.front, c.back, c.box, c.due_at, w.translation, w.definition, w.example
+        `SELECT c.id, c.front, c.back, c.box, c.due_at, c.saved_word_id, w.translation, w.definition, w.example
          FROM anki_cards c
          LEFT JOIN saved_words w ON c.saved_word_id = w.id
          WHERE c.user_id = $1 AND c.due_at <= $2
@@ -382,7 +383,8 @@ const server = createServer(async (req, res) => {
           if (c.example) parts.push(`Context: ${c.example}`);
           back = parts.join("\n\n") || c.front;
         }
-        return { id: c.id, _id: c.id, front: c.front, back, box: c.box, dueAt: c.due_at };
+        const hasScreenshot = c.saved_word_id && existsSync(join(SCREENSHOTS_DIR, `${c.saved_word_id}.jpg`));
+        return { id: c.id, _id: c.id, front: c.front, back, box: c.box, dueAt: c.due_at, screenshotUrl: hasScreenshot ? `/api/screenshots/${c.saved_word_id}.jpg` : undefined };
       }));
     }
     if (req.method === "GET" && path === "/api/cards/due-count") {

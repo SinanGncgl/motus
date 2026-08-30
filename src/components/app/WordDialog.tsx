@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { localApi } from "@/lib/local-api";
@@ -60,6 +61,7 @@ export function WordDialog({
 }: Props) {
   const [definition, setDefinition] = useState("");
   const [example, setExample] = useState("");
+  const [displayWord, setDisplayWord] = useState("");
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
   const [lookupFailed, setLookupFailed] = useState(false);
@@ -72,6 +74,7 @@ export function WordDialog({
 
   useEffect(() => {
     if (!open || !selection) return;
+    setDisplayWord(existing?.display ?? selection.display);
     setDefinition(existing?.definition ?? "");
     setExample(existing?.example ?? selection.example);
     setLookupDone(Boolean(existing));
@@ -170,10 +173,12 @@ export function WordDialog({
     if (!selection) return;
     setIsSaving(true);
     try {
+      const normalizedWord = displayWord.trim().toLowerCase();
+      const display = displayWord.trim() || selection.display;
       if (existing) {
         await localApi.words.save({
-          word: selection.word,
-          display: selection.display,
+          word: normalizedWord,
+          display,
           definition,
           example,
           sourceTitle: selection.sourceTitle,
@@ -183,8 +188,8 @@ export function WordDialog({
         toast.success("Word updated");
       } else {
         const res = await saveWord({
-          word: selection.word,
-          display: selection.display,
+          word: normalizedWord,
+          display,
           definition,
           example,
           sourceTitle: selection.sourceTitle,
@@ -212,12 +217,15 @@ export function WordDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <span className="rounded-md bg-primary/10 px-2.5 py-0.5 text-primary">
-              {selection?.display ?? ""}
-            </span>
+            <Input
+              value={displayWord}
+              onChange={(e) => setDisplayWord(e.target.value)}
+              className="h-auto w-auto flex-1 bg-primary/10 text-primary font-semibold text-lg border-none focus-visible:ring-1 focus-visible:ring-primary"
+              placeholder="Word"
+            />
             {selection && (
               <SpeakerButton
-                text={selection.display}
+                text={displayWord || selection.display}
                 lang={selection.language ?? existing?.language}
                 label="Pronounce word"
               />
@@ -241,7 +249,7 @@ export function WordDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          {selection?.contextSentence && selection?.display && (
+          {selection?.contextSentence && displayWord && (
             <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
               <span className="text-[11px] font-medium uppercase tracking-wide">
                 Context
@@ -250,12 +258,12 @@ export function WordDialog({
                 {selection.contextSentence
                   .split(
                     new RegExp(
-                      `(${selection.display.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+                      `(${displayWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
                       "i",
                     ),
                   )
                   .map((part, i) =>
-                    part.toLowerCase() === selection.display.toLowerCase() ? (
+                    part.toLowerCase() === displayWord.toLowerCase() ? (
                       <strong
                         key={i}
                         className="text-foreground font-medium"

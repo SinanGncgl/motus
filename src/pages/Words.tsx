@@ -362,9 +362,17 @@ export default function Words() {
                   </button>
                   <div className="flex flex-1 items-start justify-between gap-3">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Bookmark className="size-4" />
-                    </span>
+                    {word.screenshotUrl ? (
+                      <img
+                        src={word.screenshotUrl}
+                        alt=""
+                        className="size-9 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Bookmark className="size-4" />
+                      </span>
+                    )}
                     <div>
                       <p className="text-base font-semibold tracking-tight">
                         {word.display}

@@ -276,6 +276,13 @@ export default function Practice() {
               <Badge variant="outline" className="text-xs font-normal">
                 Do you know this word?
               </Badge>
+              {current.screenshotUrl && (
+                <img
+                  src={current.screenshotUrl}
+                  alt=""
+                  className="w-full max-h-32 rounded-lg object-cover"
+                />
+              )}
               <p className="text-center text-4xl font-semibold tracking-tight">
                 {current.front}
               </p>
@@ -300,6 +307,13 @@ export default function Practice() {
                 </Badge>
               </div>
               <div className="flex flex-col gap-4 overflow-y-auto">
+                {current.screenshotUrl && (
+                  <img
+                    src={current.screenshotUrl}
+                    alt=""
+                    className="w-full max-h-48 rounded-lg object-cover"
+                  />
+                )}
                 {current.back && (
                   <p className="whitespace-pre-wrap text-[15px] leading-7 text-foreground/90">
                     {current.back}
