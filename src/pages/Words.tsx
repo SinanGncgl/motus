@@ -53,6 +53,7 @@ interface SavedWord {
   definition: string;
   example: string;
   sourceTitle?: string;
+  language?: string;
   cardBox: number;
   cardDueAt: number | null;
 }
@@ -194,7 +195,9 @@ export default function Words() {
     }
     setTranslatingId(word._id);
     try {
-      const r = await translateLine(word.display, settings.get().translationEndpoint ? "en" : "en");
+      const userSource = settings.get().sourceLanguage;
+      const source = userSource !== "auto" ? userSource : (word.language?.slice(0, 2) || "auto");
+      const r = await translateLine(word.display, "en", source);
       if (r.ok && r.text) {
         setTranslations((prev) => ({ ...prev, [word._id]: r.text! }));
       } else {

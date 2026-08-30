@@ -26,6 +26,7 @@ export default function Settings() {
   const [autoTranslate, setAutoTranslate] = useState(
     settings.get().autoTranslateCaptions,
   );
+  const [sourceLang, setSourceLang] = useState(settings.get().sourceLanguage);
   const [nativeLang, setNativeLang] = useState(settings.get().nativeLanguage);
   const [apiKey, setApiKey] = useState(settings.get().translationApiKey);
   const [endpoint, setEndpoint] = useState(settings.get().translationEndpoint);
@@ -36,6 +37,7 @@ export default function Settings() {
       dailyGoal: Math.max(1, Math.min(200, Math.round(dailyGoal) || 20)),
       autoPausePerLine: autoPause,
       autoTranslateCaptions: autoTranslate,
+      sourceLanguage: sourceLang,
       nativeLanguage: nativeLang,
       translationApiKey: apiKey.trim(),
       translationEndpoint: endpoint.trim(),
@@ -137,6 +139,26 @@ export default function Settings() {
           />
         </label>
         <div className="flex flex-col gap-2 rounded-xl border bg-card/60 p-3">
+          <Label htmlFor="sourcelang">Translate from</Label>
+          <Select value={sourceLang} onValueChange={setSourceLang}>
+            <SelectTrigger id="sourcelang" className="w-full sm:w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">Auto-detect</SelectItem>
+              {LANGUAGES.map((l) => (
+                <SelectItem key={l.code} value={l.code.split("-")[0]}>
+                  {l.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            The language of the original captions. Set this to avoid
+            mis-detection (e.g. German auto-detected as Indonesian).
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 rounded-xl border bg-card/60 p-3">
           <Label htmlFor="nativelang">Translate into</Label>
           <Select value={nativeLang} onValueChange={setNativeLang}>
             <SelectTrigger id="nativelang" className="w-full sm:w-56">
@@ -187,9 +209,12 @@ export default function Settings() {
             className="font-mono text-xs"
           />
           <p className="text-xs text-muted-foreground">
-            Any LibreTranslate-compatible server. Leave both fields empty to
-            stay fully offline. In the Watch page, click the languages icon on
-            a caption to translate the line.
+            Any LibreTranslate-compatible server (self-hosted or a managed one
+            like libretranslate.com). Leave both fields empty to stay fully
+            offline — translation then only works if the local server has{" "}
+            <code className="rounded bg-muted px-1">LIBRETRANSLATE_URL</code> set.
+            In the Watch page, hover a line and click the languages icon to
+            translate that sentence, or use the 🇩🇪→🇬🇧 button.
           </p>
         </div>
       </div>

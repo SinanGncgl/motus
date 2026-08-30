@@ -2,7 +2,7 @@ import { SpeakerButton } from "@/components/app/SpeakerButton";
 import { WordTooltip } from "@/components/app/WordTooltip";
 import { cn } from "@/lib/utils";
 import { tokenize } from "@/lib/subtitles";
-import { Bookmark, BookmarkCheck, Copy, RotateCcw } from "lucide-react";
+import { Bookmark, BookmarkCheck, Copy, Languages, RotateCcw } from "lucide-react";
 
 interface TranscriptLineProps {
   text: string;
@@ -31,6 +31,8 @@ interface TranscriptLineProps {
   saved?: boolean;
   /** Copy the sentence (+ translation) to the clipboard. */
   onCopy?: () => void;
+  /** Translate this sentence on demand. */
+  onTranslate?: () => void;
 }
 
 /**
@@ -55,6 +57,7 @@ export function TranscriptLine({
   onReplay,
   onToggleSave,
   onCopy,
+  onTranslate,
   saved = false,
 }: TranscriptLineProps) {
   return (
@@ -130,6 +133,20 @@ export function TranscriptLine({
               title="Copy sentence + translation"
             >
               <Copy className="size-3.5" />
+            </button>
+          )}
+          {onTranslate && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTranslate();
+              }}
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Translate sentence"
+              title="Translate this sentence"
+            >
+              <Languages className="size-3.5" />
             </button>
           )}
         </div>

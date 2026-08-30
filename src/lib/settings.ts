@@ -10,7 +10,9 @@ export interface AppSettings {
   autoPausePerLine: boolean;
   /** Auto-translate the active caption line into your native language. */
   autoTranslateCaptions: boolean;
-  /** Your native language, used as the translation target (BCP-47 tag). */
+  /** Source language for translation (BCP-47 tag, or "auto" for auto-detect). */
+  sourceLanguage: string;
+  /** Target language for translation (BCP-47 tag). */
   nativeLanguage: string;
   /** Optional translation API key (online enhancement, user-provided). */
   translationApiKey: string;
@@ -25,6 +27,7 @@ const DEFAULTS: AppSettings = {
   dailyGoal: 20,
   autoPausePerLine: false,
   autoTranslateCaptions: false,
+  sourceLanguage: "auto",
   nativeLanguage: "en",
   translationApiKey: "",
   translationEndpoint: "",
