@@ -625,6 +625,28 @@ function WatchContent({ id }: { id: string }) {
     };
   }, [attachErrorCode]);
 
+  /** Try to load YouTube's built-in captions. Returns true if captions were loaded. */
+  const tryYoutubeCaptions = async (videoId: string, lang: string): Promise<boolean> => {
+    try {
+      const ytCaptions = await localApi.transcript(videoId, lang);
+      if (ytCaptions.lines && ytCaptions.lines.length > 0 && subtitle) {
+        await localApi.subtitles.update(subtitle._id, {
+          videoId,
+          language: lang,
+          lines: ytCaptions.lines,
+        });
+        setAttachUrl("");
+        toast.success(
+          `YouTube captions loaded (${ytCaptions.lines.length} lines) — no download needed!`,
+        );
+        return true;
+      }
+    } catch {
+      // No YouTube captions available
+    }
+    return false;
+  };
+
   const handleAttachVideo = async () => {
     if (!subtitle) return;
     const videoId = extractYouTubeId(attachUrl);
@@ -639,23 +661,7 @@ function WatchContent({ id }: { id: string }) {
     try {
       // Step 1: Try YouTube's built-in captions (instant, no download needed)
       setGrabProgress({ stage: "transcribing", note: "Checking for YouTube captions…" });
-      try {
-        const ytCaptions = await localApi.transcript(videoId, attachLang);
-        if (ytCaptions.lines && ytCaptions.lines.length > 0) {
-          await localApi.subtitles.update(subtitle._id, {
-            videoId,
-            language: attachLang,
-            lines: ytCaptions.lines,
-          });
-          setAttachUrl("");
-          toast.success(
-            `YouTube captions loaded (${ytCaptions.lines.length} lines) — no download needed!`,
-          );
-          return;
-        }
-      } catch {
-        // No YouTube captions available — fall through to Whisper
-      }
+      if (await tryYoutubeCaptions(videoId, attachLang)) return;
 
       // Step 2: No YouTube captions — download audio and transcribe with Whisper
       setGrabProgress(null);
@@ -679,10 +685,20 @@ function WatchContent({ id }: { id: string }) {
         `Audio downloaded and transcribed (${result.lines.length} lines) — enjoy!`,
       );
     } catch (error) {
-      setAttachErrorCode("GRAB_FAILED");
-      setAttachError(grabErrorMessage(error));
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "UPLOAD_FAILED") {
+        setAttachErrorCode("UPLOAD_FAILED");
+        setAttachError("Audio was transcribed but couldn't be saved — try again.");
+      } else if (msg.startsWith("GRAB") || msg.startsWith("YTDLP") || msg.startsWith("INVALID")) {
+        setAttachErrorCode("GRAB_FAILED");
+        setAttachError(grabErrorMessage(error));
+      } else {
+        setAttachErrorCode("TRANSCRIBE_FAILED");
+        setAttachError(transcribeErrorMessage(error));
+      }
     } finally {
       setIsAttaching(false);
+      setGrabProgress(null);
     }
   };
 
@@ -698,23 +714,7 @@ function WatchContent({ id }: { id: string }) {
       // Step 1: Try YouTube's built-in captions
       if (videoId) {
         setGrabProgress({ stage: "transcribing", note: "Checking for YouTube captions…" });
-        try {
-          const ytCaptions = await localApi.transcript(videoId, attachLang);
-          if (ytCaptions.lines && ytCaptions.lines.length > 0) {
-            await localApi.subtitles.update(subtitle._id, {
-              videoId,
-              language: attachLang,
-              lines: ytCaptions.lines,
-            });
-            setAttachUrl("");
-            toast.success(
-              `YouTube captions loaded (${ytCaptions.lines.length} lines) — no download needed!`,
-            );
-            return;
-          }
-        } catch {
-          // No YouTube captions — fall through to Whisper
-        }
+        if (await tryYoutubeCaptions(videoId, attachLang)) return;
       }
 
       // Step 2: Download audio and transcribe with Whisper
@@ -738,16 +738,20 @@ function WatchContent({ id }: { id: string }) {
         `Audio downloaded and transcribed (${result.lines.length} lines) — enjoy!`,
       );
     } catch (error) {
-      const msg = grabErrorMessage(error);
-      if (msg.includes("UPLOAD_FAILED")) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "UPLOAD_FAILED") {
         setAttachErrorCode("UPLOAD_FAILED");
         setAttachError("Audio was transcribed but couldn't be saved — try again.");
-      } else {
+      } else if (msg.startsWith("GRAB") || msg.startsWith("YTDLP") || msg.startsWith("INVALID")) {
         setAttachErrorCode("GRAB_FAILED");
-        setAttachError(msg);
+        setAttachError(grabErrorMessage(error));
+      } else {
+        setAttachErrorCode("TRANSCRIBE_FAILED");
+        setAttachError(transcribeErrorMessage(error));
       }
     } finally {
       setIsGrabbing(false);
+      setGrabProgress(null);
     }
   };
 
