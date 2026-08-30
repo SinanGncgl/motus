@@ -73,7 +73,7 @@ export type TranscribeModel = "fast" | "accurate";
 // before the tiny fallback can run.
 const MODEL_CHAIN: Record<TranscribeModel, string[]> = {
   fast: ["onnx-community/whisper-tiny"],
-  accurate: ["onnx-community/whisper-tiny"],
+  accurate: ["onnx-community/whisper-base", "onnx-community/whisper-tiny"],
 };
 
 const DEFAULT_HOST = "https://huggingface.co/";
@@ -132,16 +132,19 @@ async function createTranscriber(model: string): Promise<unknown> {
   // hubs as a fallback for development installs.
   let lastError: unknown;
   for (const host of [LOCAL_MODEL_HOST, DEFAULT_HOST, MIRROR_HOST]) {
-    if (host !== LOCAL_MODEL_HOST) env.remoteHost = host;
+    if (host !== LOCAL_MODEL_HOST) {
+      env.remoteHost = host;
+      env.allowRemoteModels = true;
+    }
     try {
       return await pipeline("automatic-speech-recognition", model, {
-        dtype: "fp32",
+        dtype: "fp16",
         // Force a fresh model cache entry. transformers.js keys its Cache
         // Storage model cache by model id + revision (not the local path), so
         // a corrupt cached model from an earlier broken state would otherwise
         // be reused forever and the load would fail without ever hitting the
         // server. Bumping the revision invalidates that cache.
-        revision: "motus-local-v2",
+        revision: "motus-local-v3",
         progress_callback: (p: {
           status?: string;
           loaded?: number;

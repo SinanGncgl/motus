@@ -2,8 +2,9 @@ import { CheckCircle2, FileAudio, Loader2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import type { SubtitleLine } from "@/lib/subtitles";
 import { localApi } from "@/lib/local-api";
-import { transcribeErrorMessage, transcribeFile, type TranscribeProgress } from "@/lib/transcribe";
+import { transcribeErrorMessage, transcribeFile, type TranscribeProgress, type TranscribeModel } from "@/lib/transcribe";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export interface TranscribedFile {
   lines: SubtitleLine[];
@@ -29,12 +30,13 @@ export function TranscribeFile({ language, onTranscribed, onError, className }: 
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<TranscribeProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [model, setModel] = useState<TranscribeModel>("fast");
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setError(null);
     try {
-      const result = await transcribeFile(file, { language, onProgress: setBusy });
+      const result = await transcribeFile(file, { language, model, onProgress: setBusy });
       setBusy({ stage: "loading" });
       const { storageId } = await localApi.upload(file);
       onTranscribed({ lines: result.lines, fileId: storageId, fileName: file.name });
@@ -51,6 +53,18 @@ export function TranscribeFile({ language, onTranscribed, onError, className }: 
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
+      <div className="flex items-center gap-2 mb-2">
+        <label className="text-sm text-muted-foreground">Quality:</label>
+        <Select value={model} onValueChange={(v) => setModel(v as TranscribeModel)}>
+          <SelectTrigger className="w-32 h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fast">Fast (tiny)</SelectItem>
+            <SelectItem value="accurate">Accurate (base)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       <input ref={inputRef} type="file" accept="video/*,audio/*" className="hidden" onChange={(e) => { void handleFile(e.target.files?.[0]); e.target.value = ""; }} />
       {busy ? (
         <div className="flex items-center gap-3 rounded-xl border bg-muted/40 px-4 py-3">

@@ -636,6 +636,7 @@ function WatchContent({ id }: { id: string }) {
       setGrabProgress({ stage: "decoding" });
       const result = await transcribeFile(file, {
         language: attachLang,
+        model: "accurate",
         onProgress: setGrabProgress,
       });
       const { storageId } = await localApi.upload(file);
@@ -667,6 +668,7 @@ function WatchContent({ id }: { id: string }) {
       const file = await grabYouTubeAudioStream(attachUrl, setGrabProgress);
       const result = await transcribeFile(file, {
         language: attachLang,
+        model: "accurate",
         onProgress: setGrabProgress,
       });
       setGrabProgress({ stage: "loading" });
