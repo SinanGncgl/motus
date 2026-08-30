@@ -79,32 +79,32 @@ export async function translateLine(
   targetLang = "en",
   sourceLang = "auto",
 ): Promise<TranslateResult> {
-  // Check cache first
-  const cached = getCachedTranslation(text, sourceLang, targetLang);
-  if (cached !== null) return { ok: true, text: cached };
-
   const { translationService } = settings.get();
+
+  // Check cache first — keyed by service so switching backends doesn't return stale results
+  const cached = getCachedTranslation(text, sourceLang, targetLang, translationService);
+  if (cached !== null) return { ok: true, text: cached };
 
   let result: TranslateResult | null = null;
 
   if (translationService === "deepl") {
     result = await translateViaDeepL(text, targetLang, sourceLang);
     if (result.ok) {
-      setCachedTranslation(text, sourceLang, targetLang, result.text!);
+      setCachedTranslation(text, sourceLang, targetLang, translationService, result.text!);
       return result;
     }
   }
 
   const server = await translateViaServer(text, targetLang, sourceLang);
   if (server.ok) {
-    setCachedTranslation(text, sourceLang, targetLang, server.text!);
+    setCachedTranslation(text, sourceLang, targetLang, translationService, server.text!);
     return server;
   }
   if (server.error !== "not-configured") return server;
 
   const endpoint = await translateViaEndpoint(text, targetLang, sourceLang);
   if (endpoint.ok) {
-    setCachedTranslation(text, sourceLang, targetLang, endpoint.text!);
+    setCachedTranslation(text, sourceLang, targetLang, translationService, endpoint.text!);
   }
   return endpoint;
 }
