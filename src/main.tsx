@@ -2,18 +2,15 @@ import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/app/AppShell";
 import { StrictMode, lazy, Suspense, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 
-const Landing = lazy(() => import("./pages/Landing.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
-const Subtitles = lazy(() => import("./pages/Subtitles.tsx"));
 const Words = lazy(() => import("./pages/Words.tsx"));
 const Practice = lazy(() => import("./pages/Practice.tsx"));
 const Watch = lazy(() => import("./pages/Watch.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const Settings = lazy(() => import("./pages/Settings.tsx"));
-const Stats = lazy(() => import("./pages/Stats.tsx"));
 
 function RouteLoading() {
   return <div className="flex min-h-screen items-center justify-center bg-background"><div className="animate-pulse text-muted-foreground">Loading…</div></div>;
@@ -32,14 +29,12 @@ createRoot(document.getElementById("root")!).render(
         <RouteSyncer />
         <Suspense fallback={<RouteLoading />}>
           <Routes>
-            <Route path="/" element={<Landing />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<LocalRoute><Dashboard /></LocalRoute>} />
-            <Route path="/subtitles" element={<LocalRoute><Subtitles /></LocalRoute>} />
             <Route path="/words" element={<LocalRoute><Words /></LocalRoute>} />
             <Route path="/practice" element={<LocalRoute><Practice /></LocalRoute>} />
             <Route path="/watch/:subtitleId" element={<LocalRoute><Watch /></LocalRoute>} />
             <Route path="/settings" element={<LocalRoute><Settings /></LocalRoute>} />
-            <Route path="/stats" element={<LocalRoute><Stats /></LocalRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

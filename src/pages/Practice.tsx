@@ -153,7 +153,7 @@ export default function Practice() {
           <EmptyContent>
             <Button
               type="button"
-              onClick={() => navigate("/subtitles")}
+              onClick={() => navigate("/dashboard")}
               className="cursor-pointer gap-2"
             >
               <Captions className="size-4" />

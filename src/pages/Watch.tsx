@@ -128,7 +128,7 @@ export default function Watch() {
 
   useEffect(() => {
     if (!subtitleId) {
-      navigate("/subtitles", { replace: true });
+      navigate("/dashboard", { replace: true });
     }
   }, [subtitleId, navigate]);
 
@@ -737,9 +737,9 @@ function WatchContent({ id }: { id: string }) {
             type="button"
             variant="ghost"
             className="w-fit cursor-pointer gap-2 pl-0 text-muted-foreground"
-            onClick={() => navigate("/subtitles")}
+            onClick={() => navigate("/dashboard")}
           >
-            <ArrowLeft className="size-4" /> Subtitles
+            <ArrowLeft className="size-4" /> Dashboard
           </Button>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
@@ -789,10 +789,10 @@ function WatchContent({ id }: { id: string }) {
           <EmptyContent>
             <Button
               type="button"
-              onClick={() => navigate("/subtitles")}
+              onClick={() => navigate("/dashboard")}
               className="cursor-pointer"
             >
-              Back to subtitles
+              Back to dashboard
             </Button>
           </EmptyContent>
         </Empty>
