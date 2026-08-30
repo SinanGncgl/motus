@@ -41,7 +41,7 @@ import {
   Trash2,
   Volume2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { buildAnkiTsv, downloadFile } from "@/lib/subtitles";
@@ -67,6 +67,13 @@ function statusFor(box: number) {
 export default function Words() {
   const [words, refreshWords] = useLocalWords();
   const navigate = useNavigate();
+
+  // Refresh word list when a word is saved from any page (e.g., Watch)
+  useEffect(() => {
+    const handler = () => void refreshWords();
+    window.addEventListener("motus:word-saved", handler);
+    return () => window.removeEventListener("motus:word-saved", handler);
+  }, [refreshWords]);
 
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<SavedWord | null>(null);

@@ -34,7 +34,7 @@ import {
   Trash2,
   Video,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
@@ -62,6 +62,13 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [newSubOpen, setNewSubOpen] = useState(false);
   const [collectionFilter, setCollectionFilter] = useState<string | null>(null);
+
+  // Refresh word count when a word is saved from any page
+  useEffect(() => {
+    const handler = () => void refreshWords();
+    window.addEventListener("motus:word-saved", handler);
+    return () => window.removeEventListener("motus:word-saved", handler);
+  }, [refreshWords]);
 
   const goal = settings.get().dailyGoal;
   const reviewedToday = streak.reviewedToday();

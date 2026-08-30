@@ -185,6 +185,7 @@ export function WordDialog({
           language: selection.language,
           translation: selection.translation,
         });
+        window.dispatchEvent(new CustomEvent("motus:word-saved"));
         toast.success("Word updated");
       } else {
         const res = await saveWord({

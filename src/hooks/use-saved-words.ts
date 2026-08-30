@@ -78,5 +78,5 @@ export function useSavedWords() {
     }
   }, []);
 
-  return { words, ready, isSaved, existing, save, remove };
+  return { words, ready, isSaved, existing, save, remove, refresh: async () => { const fresh = await localApi.words.list(); setWords(fresh); } };
 }

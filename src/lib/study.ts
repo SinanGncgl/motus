@@ -49,6 +49,8 @@ export async function saveWord(input: SaveWordInput): Promise<{
         // Screenshot upload is best-effort; don't block word save
       });
     }
+    // Notify all components that a word was saved (cross-page refresh)
+    window.dispatchEvent(new CustomEvent("motus:word-saved"));
     return { skipped: false, saved: true };
   } catch {
     toast.error("Could not save the word.");

@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -41,6 +42,7 @@ import { tokenize } from "@/lib/subtitles";
 import {
   transcribeErrorMessage,
   transcribeFile,
+  type TranscribeModel,
   type TranscribeProgress,
 } from "@/lib/transcribe";
 import { LANGUAGES, languageLabel, speak } from "@/lib/tts";
@@ -200,6 +202,7 @@ function WatchContent({ id }: { id: string }) {
   const [attachMode, setAttachMode] = useState<"youtube" | "file">("youtube");
   const [attachUrl, setAttachUrl] = useState("");
   const [attachLang, setAttachLang] = useState("en-US");
+  const [attachModel, setAttachModel] = useState<TranscribeModel>("accurate");
   const [isAttaching, setIsAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [attachErrorCode, setAttachErrorCode] = useState<string | null>(null);
@@ -637,7 +640,7 @@ function WatchContent({ id }: { id: string }) {
       setGrabProgress({ stage: "decoding" });
       const result = await transcribeFile(file, {
         language: attachLang,
-        model: "accurate",
+        model: attachModel,
         onProgress: setGrabProgress,
       });
       const { storageId } = await localApi.upload(file);
@@ -669,7 +672,7 @@ function WatchContent({ id }: { id: string }) {
       const file = await grabYouTubeAudioStream(attachUrl, setGrabProgress);
       const result = await transcribeFile(file, {
         language: attachLang,
-        model: "accurate",
+        model: attachModel,
         onProgress: setGrabProgress,
       });
       setGrabProgress({ stage: "loading" });
@@ -1285,34 +1288,50 @@ function WatchContent({ id }: { id: string }) {
                         if (e.key === "Enter") void handleAttachVideo();
                       }}
                     />
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs text-muted-foreground whitespace-nowrap">Model:</Label>
+                      <Select value={attachModel} onValueChange={(v) => setAttachModel(v as TranscribeModel)}>
+                        <SelectTrigger className="h-8 w-auto text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fast">Fast (tiny, ~75 MB)</SelectItem>
+                          <SelectItem value="accurate">Accurate (base, ~142 MB)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {/* Progress bar — always visible during transcription */}
+                    {(isAttaching || isGrabbing || (attachErrorCode === "GRAB_FAILED" && grabProgress)) && (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                          <Loader2 className="size-3 animate-spin" />
+                          {grabProgress
+                            ? GRAB_STAGE_LABELS[grabProgress.stage]
+                            : isAttaching
+                              ? "Downloading audio and transcribing…"
+                              : "Working…"}
+                          {grabProgress?.stage === "downloading" &&
+                            grabProgress.percent !== undefined && (
+                              <span className="ml-auto tabular-nums text-foreground/70">
+                                {grabProgress.percent}%
+                              </span>
+                            )}
+                        </div>
+                        {grabProgress?.stage === "downloading" && (
+                          <Progress
+                            value={grabProgress.percent ?? 0}
+                            className="h-1.5"
+                          />
+                        )}
+                      </div>
+                    )}
                     {attachError && (
                       <div className="flex flex-col gap-2">
                         <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
                           {attachError}
                         </p>
-                        {attachErrorCode === "GRAB_FAILED" &&
-                          (isGrabbing || grabProgress ? (
-                            <div className="flex flex-col gap-1.5">
-                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                <Loader2 className="size-3 animate-spin" />
-                                {grabProgress
-                                  ? GRAB_STAGE_LABELS[grabProgress.stage]
-                                  : "Downloading audio and generating subtitles…"}
-                                {grabProgress?.stage === "downloading" &&
-                                  grabProgress.percent !== undefined && (
-                                    <span className="ml-auto tabular-nums text-foreground/70">
-                                      {grabProgress.percent}%
-                                    </span>
-                                  )}
-                              </div>
-                              {grabProgress?.stage === "downloading" && (
-                                <Progress
-                                  value={grabProgress.percent ?? 0}
-                                  className="h-1.5"
-                                />
-                              )}
-                            </div>
-                          ) : grabHealth?.ok && grabHealth.ytDlp ? (
+                        {attachErrorCode === "GRAB_FAILED" && !isGrabbing && !grabProgress && (
+                          grabHealth?.ok && grabHealth.ytDlp ? (
                             <Button
                               type="button"
                               size="sm"
@@ -1339,7 +1358,8 @@ function WatchContent({ id }: { id: string }) {
                               locally. Then retry — Motus will download the audio
                               and generate the SRT automatically.
                             </span>
-                          ))}
+                          )
+                        )}
                         <Button
                           type="button"
                           variant="outline"
