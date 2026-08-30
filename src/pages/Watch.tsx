@@ -203,6 +203,7 @@ function WatchContent({ id }: { id: string }) {
   const [attachUrl, setAttachUrl] = useState("");
   const [attachLang, setAttachLang] = useState("en-US");
   const [attachModel, setAttachModel] = useState<TranscribeModel>("accurate");
+  const [transcribeMode, setTranscribeMode] = useState<"auto" | "youtube" | "whisper">("auto");
   const [isAttaching, setIsAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [attachErrorCode, setAttachErrorCode] = useState<string | null>(null);
@@ -659,9 +660,15 @@ function WatchContent({ id }: { id: string }) {
     setAttachErrorCode(null);
     setGrabProgress(null);
     try {
-      // Step 1: Try YouTube's built-in captions (instant, no download needed)
-      setGrabProgress({ stage: "transcribing", note: "Checking for YouTube captions…" });
-      if (await tryYoutubeCaptions(videoId, attachLang)) return;
+      // Step 1: Try YouTube's built-in captions (unless user chose Whisper-only)
+      if (transcribeMode !== "whisper") {
+        setGrabProgress({ stage: "transcribing", note: "Checking for YouTube captions…" });
+        if (await tryYoutubeCaptions(videoId, attachLang)) return;
+        if (transcribeMode === "youtube") {
+          setAttachError("This video doesn't have YouTube captions available. Try 'Auto' mode for Whisper fallback.");
+          return;
+        }
+      }
 
       // Step 2: No YouTube captions — download audio and transcribe with Whisper
       setGrabProgress(null);
@@ -711,10 +718,14 @@ function WatchContent({ id }: { id: string }) {
     try {
       const videoId = extractYouTubeId(attachUrl);
 
-      // Step 1: Try YouTube's built-in captions
-      if (videoId) {
+      // Step 1: Try YouTube's built-in captions (unless user chose Whisper-only)
+      if (videoId && transcribeMode !== "whisper") {
         setGrabProgress({ stage: "transcribing", note: "Checking for YouTube captions…" });
         if (await tryYoutubeCaptions(videoId, attachLang)) return;
+        if (transcribeMode === "youtube") {
+          setAttachError("This video doesn't have YouTube captions available. Try 'Auto' mode for Whisper fallback.");
+          return;
+        }
       }
 
       // Step 2: Download audio and transcribe with Whisper
@@ -1336,6 +1347,19 @@ function WatchContent({ id }: { id: string }) {
                         if (e.key === "Enter") void handleAttachVideo();
                       }}
                     />
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs text-muted-foreground whitespace-nowrap">Source:</Label>
+                      <Select value={transcribeMode} onValueChange={(v) => setTranscribeMode(v as typeof transcribeMode)}>
+                        <SelectTrigger className="h-8 w-auto text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Auto (captions first)</SelectItem>
+                          <SelectItem value="youtube">YouTube captions only</SelectItem>
+                          <SelectItem value="whisper">Whisper only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="flex items-center gap-2">
                       <Label className="text-xs text-muted-foreground whitespace-nowrap">Model:</Label>
                       <Select value={attachModel} onValueChange={(v) => setAttachModel(v as TranscribeModel)}>
