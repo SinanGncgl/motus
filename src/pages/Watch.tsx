@@ -178,6 +178,9 @@ function WatchContent({ id }: { id: string }) {
   const [showTranslation, setShowTranslation] = useState(
     settings.get().autoTranslateCaptions,
   );
+  const [translateTarget, setTranslateTarget] = useState(
+    settings.get().nativeLanguage,
+  );
   const [wordDialogOpen, setWordDialogOpen] = useState(false);
   const [selection, setSelection] = useState<WordSelection | null>(null);
 
@@ -273,7 +276,7 @@ function WatchContent({ id }: { id: string }) {
     if (!line) return;
     if (translations[row] !== undefined || translatingRows.has(row)) return;
     setTranslatingRows((prev) => new Set(prev).add(row));
-    const target = settings.get().nativeLanguage.slice(0, 2);
+    const target = translateTarget.slice(0, 2);
     const userSource = settings.get().sourceLanguage;
     const source = userSource !== "auto" ? userSource : (subtitle?.language?.slice(0, 2) || "auto");
     translateLine(line.text, target, source)
@@ -296,7 +299,12 @@ function WatchContent({ id }: { id: string }) {
     if (activeRow === null) return;
     translateRow(activeRow);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRow, subtitle?.language]);
+  }, [activeRow, subtitle?.language, translateTarget]);
+
+  // Clear cached translations when target language changes
+  useEffect(() => {
+    setTranslations({});
+  }, [translateTarget]);
 
   useEffect(() => {
     if (playerRef.current?.setPlaybackRate) {
@@ -1071,6 +1079,34 @@ function WatchContent({ id }: { id: string }) {
                       {showCaptions ? "CC" : "CC off"}
                     </Button>
 
+                    <Select
+                      value={translateTarget}
+                      onValueChange={(v) => {
+                        setTranslateTarget(v);
+                        setTranslations({});
+                      }}
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          "h-8 w-auto gap-1.5 cursor-pointer",
+                          showTranslation
+                            ? "border-primary bg-primary/10"
+                            : "",
+                        )}
+                        aria-label="Translation target language"
+                      >
+                        <Languages className="size-4" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGES.map((l) => (
+                          <SelectItem key={l.code} value={l.code}>
+                            {l.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
                     <Button
                       type="button"
                       variant={showTranslation ? "secondary" : "outline"}
@@ -1079,7 +1115,7 @@ function WatchContent({ id }: { id: string }) {
                       onClick={() => setShowTranslation((v) => !v)}
                       aria-pressed={showTranslation}
                     >
-                      <Languages className="size-4" />🇩🇪→🇬🇧
+                      {showTranslation ? "Hide" : "Show"} T
                     </Button>
 
                     <Button
