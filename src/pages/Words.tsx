@@ -54,6 +54,7 @@ interface SavedWord {
   example: string;
   sourceTitle?: string;
   language?: string;
+  screenshotUrl?: string;
   cardBox: number;
   cardDueAt: number | null;
 }
