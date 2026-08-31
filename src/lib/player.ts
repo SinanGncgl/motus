@@ -26,21 +26,27 @@ export async function captureFrame(
 ): Promise<Blob | null> {
   try {
     const player = playerRef.current?.getInternalPlayer?.();
-    if (!player || player.videoWidth <= 0) return null;
+    if (!player || player.videoWidth <= 0) {
+      console.log("[captureFrame] no player or video not ready", { player: !!player, videoWidth: player?.videoWidth });
+      return null;
+    }
     const canvas = document.createElement("canvas");
     canvas.width = player.videoWidth;
     canvas.height = player.videoHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(player, 0, 0);
-    return await new Promise<Blob | null>((resolve) => {
+    const blob = await new Promise<Blob | null>((resolve) => {
       canvas.toBlob(
-        (blob) => resolve(blob),
+        (b) => resolve(b),
         "image/jpeg",
         0.85,
       );
     });
-  } catch {
+    console.log("[captureFrame] captured", { width: canvas.width, height: canvas.height, blobSize: blob?.size });
+    return blob;
+  } catch (e) {
+    console.log("[captureFrame] error", e);
     return null;
   }
 }
