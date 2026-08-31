@@ -104,13 +104,24 @@ export default function Words() {
     });
   }, [words, query, statusFilter]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!words || words.length === 0) return;
-    const rows = words.map((w) => {
+    const rows = await Promise.all(words.map(async (w) => {
       // Build rich front with word and optional screenshot
       const frontParts = [w.display];
       if (w.screenshotUrl) {
-        frontParts.push(`<img src="${w.screenshotUrl}" />`);
+        try {
+          const resp = await fetch(w.screenshotUrl);
+          const blob = await resp.blob();
+          const base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          frontParts.push(`<img src="${base64}" />`);
+        } catch {
+          // Skip screenshot if fetch fails
+        }
       }
       const front = frontParts.join("<br>");
 
@@ -127,7 +138,7 @@ export default function Words() {
       const back = backParts.join("");
 
       return { front, back };
-    });
+    }));
     const tsv = buildAnkiTsv(rows);
     const stamp = new Date().toISOString().slice(0, 10);
     downloadFile(`motus-anki-${stamp}.tsv`, tsv);

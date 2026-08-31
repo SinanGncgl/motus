@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/empty";
 import { useLocalWords, useDueCount, useLocalSubtitles } from "@/hooks/use-local-data";
 import { settings } from "@/lib/settings";
-import { session, sessionHistory, streak } from "@/lib/streak";
+import { session, streak } from "@/lib/streak";
 import { languageLabel } from "@/lib/tts";
 import { localApi } from "@/lib/local-api";
 import {
@@ -75,8 +75,7 @@ export default function Dashboard() {
   const currentStreak = streak.current();
   const bestStreak = streak.best();
   const last14 = useMemo(() => streak.lastDays(14), [words, reviewedToday]);
-  const lastSession = useMemo(() => session.last(), [words, reviewedToday]);
-  const recentSessions = useMemo(() => sessionHistory.getAll().slice(-10).reverse(), [words, reviewedToday]);
+
 
   const mastered = (words ?? []).filter((w) => w.cardBox >= 3).length;
   const goalPct = Math.min(100, Math.round((reviewedToday / goal) * 100));
@@ -174,11 +173,6 @@ export default function Dashboard() {
             <CardTitle className="flex items-center gap-2 text-base">
               <Flame className="size-5 text-orange-500" /> Streak
             </CardTitle>
-            {lastSession && lastSession.reviewed > 0 && (
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                Last session {lastSession.accuracy}%
-              </span>
-            )}
           </CardHeader>
           <CardContent>
             <p className="text-4xl font-semibold">{currentStreak}</p>
@@ -211,30 +205,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
-      {recentSessions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarDays className="size-4 text-primary" /> Recent sessions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {recentSessions.map((s, i) => (
-                <li key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    {new Date(s.at).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                  <span className="font-medium">
-                    {s.correct}/{s.reviewed} correct · {s.accuracy}%
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid gap-4 sm:grid-cols-4">
         <div className="rounded-2xl border bg-card p-5 shadow-sm">

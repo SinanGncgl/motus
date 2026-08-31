@@ -404,7 +404,14 @@ function WatchContent({ id }: { id: string }) {
   const saveWordFromToken = async (tokenWord: string, raw: string, lineText: string) => {
     playerRef.current?.pauseVideo();
     if (!subtitle) return;
-    const screenshot = await captureFrame(playerRef);
+    let screenshot = await captureFrame(playerRef);
+    // For YouTube videos, captureFrame returns null (CORS). Use thumbnail as fallback.
+    if (!screenshot && subtitle.videoId) {
+      try {
+        const resp = await fetch(`https://i.ytimg.com/vi/${subtitle.videoId}/hqdefault.jpg`);
+        if (resp.ok) screenshot = await resp.blob();
+      } catch {}
+    }
     void save({
       word: tokenWord,
       display: raw,
@@ -469,7 +476,14 @@ function WatchContent({ id }: { id: string }) {
 
   const saveCurrentSentence = async () => {
     if (!activeLine || !subtitle) return;
-    const screenshot = await captureFrame(playerRef);
+    let screenshot = await captureFrame(playerRef);
+    // For YouTube videos, use thumbnail as fallback
+    if (!screenshot && subtitle.videoId) {
+      try {
+        const resp = await fetch(`https://i.ytimg.com/vi/${subtitle.videoId}/hqdefault.jpg`);
+        if (resp.ok) screenshot = await resp.blob();
+      } catch {}
+    }
     let count = 0;
     for (const token of tokenize(activeLine.text)) {
       if (!token.word) continue;
