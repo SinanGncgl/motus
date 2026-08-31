@@ -54,7 +54,7 @@ export default function Practice() {
   const reviewedCount = reviewed.size;
   const totalCount = reviewedCount + queue.length;
 
-  const handleRate = async (rating: "again" | "good" | "easy") => {
+  const handleRate = async (rating: "again" | "hard" | "good" | "easy") => {
     if (!current || isRating) return;
     // Drop focus so Space doesn't re-trigger the rating button while flipping.
     if (document.activeElement instanceof HTMLElement) {
@@ -87,7 +87,6 @@ export default function Practice() {
     }
   };
 
-  // Keyboard shortcuts: Space flips, 1/2/3 rate.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!current) return;
@@ -97,8 +96,10 @@ export default function Practice() {
       } else if (e.key === "1") {
         void handleRate("again");
       } else if (e.key === "2") {
-        void handleRate("good");
+        void handleRate("hard");
       } else if (e.key === "3") {
+        void handleRate("good");
+      } else if (e.key === "4") {
         void handleRate("easy");
       }
     };
@@ -325,7 +326,7 @@ export default function Practice() {
         </div>
 
         {/* Rating controls */}
-        <div className="mt-6 grid grid-cols-3 gap-3">
+        <div className="mt-6 grid grid-cols-4 gap-3">
           <Button
             type="button"
             variant="outline"
@@ -343,6 +344,20 @@ export default function Practice() {
           </Button>
           <Button
             type="button"
+            variant="outline"
+            disabled={isRating}
+            onClick={() => void handleRate("hard")}
+            className="cursor-pointer flex-col gap-1 py-3 sm:flex-row"
+          >
+            <span>
+              Hard
+              <kbd className="ml-1.5 rounded border px-1 font-mono text-[10px] text-muted-foreground">
+                2
+              </kbd>
+            </span>
+          </Button>
+          <Button
+            type="button"
             disabled={isRating}
             onClick={() => void handleRate("good")}
             className="cursor-pointer flex-col gap-1 py-3 sm:flex-row"
@@ -351,7 +366,7 @@ export default function Practice() {
             <span>
               Good
               <kbd className="ml-1.5 rounded bg-primary-foreground/20 px-1 font-mono text-[10px]">
-                2
+                3
               </kbd>
             </span>
           </Button>
@@ -366,13 +381,13 @@ export default function Practice() {
             <span>
               Easy
               <kbd className="ml-1.5 rounded border px-1 font-mono text-[10px] text-muted-foreground">
-                3
+                4
               </kbd>
             </span>
           </Button>
         </div>
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          Space flips the card · 1 / 2 / 3 rates it
+          Space flips the card · 1 / 2 / 3 / 4 rates it
         </p>
       </div>
       ) : (
