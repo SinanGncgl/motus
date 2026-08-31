@@ -310,14 +310,37 @@ const server = createServer(async (req, res) => {
           [a.display || existing.display || word, a.definition || existing.definition || "", a.example || existing.example || "", a.sourceTitle ?? existing.source_title ?? null, a.language ?? existing.language ?? null, a.translation ?? existing.translation ?? null, now(), existing.id]);
         const c = await q1("SELECT id FROM anki_cards WHERE saved_word_id = $1", [existing.id]);
         if (c) await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [a.display || existing.display || word, formatCardBack(a, existing.display || word), c.id]);
+        // Create sentence card if example exists and no sentence card exists
+        if (a.example && a.example.trim()) {
+          const existingSentenceCard = await q1("SELECT id FROM anki_cards WHERE saved_word_id = $1 AND card_type = 'sentence'", [existing.id]);
+          if (!existingSentenceCard) {
+            const normalizedWord = (a.display || existing.display || word).trim();
+            const re = new RegExp(`\\b${normalizedWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+            const sentenceFront = a.example.replace(re, "____");
+            const sentenceBack = `${a.example}\n\n${formatCardBack(a, normalizedWord)}`;
+            const scid = id("card");
+            await q("INSERT INTO anki_cards (id,user_id,saved_word_id,front,back,box,due_at,card_type,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+              [scid, uid, existing.id, sentenceFront, sentenceBack, 0, now(), "sentence", now()]);
+          }
+        }
         return send(res, 200, { wordId: existing.id, created: false });
       }
       const wid = id("word");
       await q("INSERT INTO saved_words (id,user_id,word,display,definition,example,source_title,language,translation,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
         [wid, uid, word, a.display || word, a.definition || "", a.example || "", a.sourceTitle ?? null, a.language ?? null, a.translation ?? null, now(), now()]);
       const cid = id("card");
-      await q("INSERT INTO anki_cards (id,user_id,saved_word_id,front,back,box,due_at,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-        [cid, uid, wid, a.display || word, formatCardBack(a, a.display || word), 0, now(), now()]);
+      await q("INSERT INTO anki_cards (id,user_id,saved_word_id,front,back,box,due_at,card_type,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        [cid, uid, wid, a.display || word, formatCardBack(a, a.display || word), 0, now(), "word", now()]);
+      // Create sentence card if example exists
+      if (a.example && a.example.trim()) {
+        const normalizedWord = (a.display || word).trim();
+        const re = new RegExp(`\\b${normalizedWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+        const sentenceFront = a.example.replace(re, "____");
+        const sentenceBack = `${a.example}\n\n${formatCardBack(a, normalizedWord)}`;
+        const scid = id("card");
+        await q("INSERT INTO anki_cards (id,user_id,saved_word_id,front,back,box,due_at,card_type,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+          [scid, uid, wid, sentenceFront, sentenceBack, 0, now(), "sentence", now()]);
+      }
       return send(res, 200, { wordId: wid, created: true });
     }
     if (p[0] === "api" && p[1] === "words" && p[2]) {
