@@ -93,6 +93,7 @@ function formatCardBack(a, fallbackWord) {
   if (a.definition) parts.push(a.definition);
   if (a.example) parts.push(`Context: ${a.example}`);
   if (a.translation) parts.push(`Translation: ${a.translation}`);
+  if (a.sourceTitle) parts.push(`Source: ${a.sourceTitle}`);
   return parts.join("\n\n") || fallbackWord;
 }
 
