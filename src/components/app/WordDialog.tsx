@@ -185,6 +185,9 @@ export function WordDialog({
           language: selection.language,
           translation: selection.translation,
         });
+        if (screenshot && existing._id) {
+          localApi.words.uploadScreenshot(existing._id, screenshot).catch(() => {});
+        }
         window.dispatchEvent(new CustomEvent("motus:word-saved"));
         toast.success("Word updated");
       } else {
