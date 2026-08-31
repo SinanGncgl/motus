@@ -43,9 +43,9 @@ export async function saveWord(input: SaveWordInput): Promise<{
       language: input.language,
       translation: input.translation ?? "",
     });
-    // Upload screenshot if provided (non-blocking — word is already saved)
+    // Upload screenshot if provided (await to ensure file exists on disk)
     if (input.screenshot && result.wordId) {
-      localApi.words.uploadScreenshot(result.wordId, input.screenshot).catch(() => {
+      await localApi.words.uploadScreenshot(result.wordId, input.screenshot).catch(() => {
         // Screenshot upload is best-effort; don't block word save
       });
     }
