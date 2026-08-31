@@ -10,6 +10,7 @@ interface SaveInput {
   example?: string;
   sourceTitle?: string;
   language?: string;
+  screenshot?: Blob;
 }
 
 /**
