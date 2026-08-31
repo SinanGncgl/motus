@@ -148,7 +148,7 @@ export default function Watch() {
 function WatchContent({ id }: { id: string }) {
   const navigate = useNavigate();
   const [subtitle, setSubtitle] = useState<LocalSubtitle | null | undefined>();
-  const { words: savedWords, isSaved, existing, save, remove } = useSavedWords();
+  const { words: savedWords, isSaved, existing, save, remove, refresh } = useSavedWords();
 
   useEffect(() => {
     void localApi.subtitles
@@ -377,6 +377,13 @@ function WatchContent({ id }: { id: string }) {
       }
     };
   }, [subtitle]);
+
+  // Refresh saved words when a word is saved from any source
+  useEffect(() => {
+    const handler = () => { void refresh(); };
+    window.addEventListener("motus:word-saved", handler);
+    return () => window.removeEventListener("motus:word-saved", handler);
+  }, [refresh]);
 
   const openWord = (tokenWord: string, raw: string, lineText: string) => {
     playerRef.current?.pauseVideo();
