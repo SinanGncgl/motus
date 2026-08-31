@@ -405,14 +405,11 @@ const server = createServer(async (req, res) => {
          ORDER BY c.due_at ASC LIMIT 200`,
         [uid, now(), suspendCutoff],
       );
-      // Limit new cards per day
+      // Limit new cards per day — only count cards never reviewed before
       const newCardsLimit = parseInt(u.searchParams.get("newCardsLimit") || "10", 10);
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayStartMs = todayStart.getTime();
       let newCardsSeen = 0;
       const filtered = due.rows.filter((c) => {
-        if (c.box === 0 && (!c.last_reviewed_at || c.last_reviewed_at >= todayStartMs)) {
+        if (c.box === 0 && !c.last_reviewed_at) {
           newCardsSeen++;
           return newCardsSeen <= newCardsLimit;
         }
@@ -464,7 +461,7 @@ const server = createServer(async (req, res) => {
           break;
         case "hard":
           newBox = c.box;
-          intervalMs = Math.floor(intervals[c.box] * 0.5);
+          intervalMs = Math.max(Math.floor(intervals[c.box] * 0.5), 360000);
           break;
         case "good":
           newBox = Math.min(c.box + 1, 5);
@@ -477,7 +474,9 @@ const server = createServer(async (req, res) => {
         default:
           return fail(res, 400, "Invalid rating");
       }
-      const dueAt = now() + intervalMs;
+      // Fuzz: add ±5% randomness to prevent card clustering
+      const fuzz = Math.floor(intervalMs * 0.05 * (Math.random() * 2 - 1));
+      const dueAt = now() + intervalMs + fuzz;
       const leechCount = a.rating === "again" ? (c.leech_count || 0) + 1 : 0;
       await q(
         "UPDATE anki_cards SET box=$1, due_at=$2, last_reviewed_at=$3, leech_count=$4 WHERE id=$5",

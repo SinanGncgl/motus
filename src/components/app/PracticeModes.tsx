@@ -152,7 +152,6 @@ export function ClozePractice({ words, cards, onResult, onRate }: {
               variant="outline"
               className="cursor-pointer"
               onClick={() => {
-                onRate?.(current.cardId, "again");
                 setIncorrect((c) => c + 1);
                 setIdx((i) => i + 1);
                 setAnswer("");
