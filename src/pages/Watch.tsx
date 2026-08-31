@@ -48,7 +48,7 @@ import {
 import { LANGUAGES, languageLabel, speak } from "@/lib/tts";
 import { useSavedWords } from "@/hooks/use-saved-words";
 import { cn } from "@/lib/utils";
-import type { PlayerHandle } from "@/lib/player";
+import { captureFrame, type PlayerHandle } from "@/lib/player";
 import {
   copyToClipboard,
   detectLocalGrabber,
@@ -394,17 +394,19 @@ function WatchContent({ id }: { id: string }) {
     setWordDialogOpen(true);
   };
 
-  const saveWordFromToken = (tokenWord: string, raw: string, lineText: string) => {
+  const saveWordFromToken = async (tokenWord: string, raw: string, lineText: string) => {
     playerRef.current?.pauseVideo();
     if (!subtitle) return;
+    const screenshot = await captureFrame(playerRef);
     void save({
       word: tokenWord,
       display: raw,
       example: lineText,
       sourceTitle: subtitle.title,
       language: subtitle.language,
+      screenshot: screenshot ?? undefined,
     });
-    toast.success(`Saved “${raw}”`);
+    toast.success(`Saved "${raw}"`);
   };
 
   const seekToLine = (row: number) => {
@@ -458,8 +460,9 @@ function WatchContent({ id }: { id: string }) {
     }
   };
 
-  const saveCurrentSentence = () => {
+  const saveCurrentSentence = async () => {
     if (!activeLine || !subtitle) return;
+    const screenshot = await captureFrame(playerRef);
     let count = 0;
     for (const token of tokenize(activeLine.text)) {
       if (!token.word) continue;
@@ -470,6 +473,7 @@ function WatchContent({ id }: { id: string }) {
         example: activeLine.text,
         sourceTitle: subtitle.title,
         language: subtitle.language,
+        screenshot: screenshot ?? undefined,
       });
       count++;
     }
