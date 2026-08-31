@@ -33,6 +33,18 @@ import { toast } from "sonner";
 
 type Card = LocalCard;
 
+function formatNextDue(ms: number): string {
+  const now = Date.now();
+  const diff = ms - now;
+  if (diff <= 0) return "now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `in ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `in ${hours}h ${mins % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `in ${days}d`;
+}
+
 export default function Practice() {
   const [due, refreshDue] = useDueCards();
   const navigate = useNavigate();
@@ -46,6 +58,7 @@ export default function Practice() {
 
   const [mode, setMode] = useState<PracticeMode>("flashcard");
   const [allWords] = useLocalWords();
+  const [nextDueMs, setNextDueMs] = useState<number | null>(null);
 
   const queue = useMemo(() => {
     const fresh = (due ?? []).filter((c) => !reviewed.has(c.id ?? c._id ?? ""));
@@ -59,6 +72,13 @@ export default function Practice() {
   const current = queue[0] ?? null;
   const reviewedCount = reviewed.size;
   const totalCount = reviewedCount + queue.length;
+
+  // Fetch next due time when no cards are available
+  useEffect(() => {
+    if (due && due.length === 0 && againQueue.length === 0 && reviewed.size === 0) {
+      localApi.cards.nextDue().then((r) => setNextDueMs(r.nextDue)).catch(() => {});
+    }
+  }, [due, againQueue.length, reviewed.size]);
 
   const handleRate = async (rating: "again" | "hard" | "good" | "easy") => {
     if (!current || isRating) return;
@@ -160,8 +180,11 @@ export default function Practice() {
             </EmptyMedia>
             <EmptyTitle>All caught up</EmptyTitle>
             <EmptyDescription>
-              Every card is scheduled. Save more words from subtitles to grow
-              your deck, or wait for the next review window.
+              Every card is scheduled.{" "}
+              {nextDueMs
+                ? `Next review ${formatNextDue(nextDueMs)}. `
+                : ""}
+              Save more words from subtitles to grow your deck.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>

@@ -447,6 +447,11 @@ const server = createServer(async (req, res) => {
       const n = await q1("SELECT COUNT(*)::int AS n FROM anki_cards WHERE user_id = $1 AND due_at <= $2 AND due_at < $3", [uid, now(), suspendCutoff]);
       return send(res, 200, n?.n ?? 0);
     }
+    if (req.method === "GET" && path === "/api/cards/next-due") {
+      const suspendCutoff = now() + 300 * 86400000;
+      const r = await q1("SELECT MIN(due_at) AS next_due FROM anki_cards WHERE user_id = $1 AND due_at > $2 AND due_at < $3", [uid, now(), suspendCutoff]);
+      return send(res, 200, { nextDue: r?.next_due ?? null });
+    }
     if (req.method === "POST" && path === "/api/cards/rate") {
       const a = await body(req);
       const c = await q1("SELECT * FROM anki_cards WHERE id = $1 AND user_id = $2", [a.cardId, uid]);
