@@ -102,6 +102,7 @@ await pool.query(SCHEMA);
 // Migration: add translation column to saved_words if missing
 await pool.query("ALTER TABLE saved_words ADD COLUMN IF NOT EXISTS translation TEXT").catch(() => {});
 await pool.query("ALTER TABLE anki_cards ADD COLUMN IF NOT EXISTS leech_count INTEGER DEFAULT 0").catch(() => {});
+await pool.query("ALTER TABLE anki_cards ADD COLUMN IF NOT EXISTS card_type TEXT DEFAULT 'word'").catch(() => {});
 await pool.query(
   "INSERT INTO users (id,name,email,image,is_anonymous) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
   ["local-user", "Local learner", "local@localhost", null, true],
@@ -360,39 +361,58 @@ const server = createServer(async (req, res) => {
         await writeFile(filePath, buf);
         return send(res, 200, { ok: true });
       }
+      // Suspend a card (set due_at to +1 year)
+      if (req.method === "POST" && path === "/api/cards/suspend") {
+        const a = await body(req);
+        const c = await q1("SELECT * FROM anki_cards WHERE id = $1 AND user_id = $2", [a.cardId, uid]);
+        if (!c) return fail(res, 404, "Card not found");
+        const oneYear = now() + 365 * 86400000;
+        await q("UPDATE anki_cards SET due_at=$1 WHERE id=$2", [oneYear, c.id]);
+        return send(res, 200, { ok: true });
+      }
     }
 
     if (req.method === "GET" && path === "/api/cards/due") {
+      const suspendCutoff = now() + 300 * 86400000;
       const due = await q(
-        `SELECT c.id, c.front, c.back, c.box, c.due_at, c.saved_word_id, w.translation, w.definition, w.example
+        `SELECT c.id, c.front, c.back, c.box, c.due_at, c.leech_count, c.card_type, c.saved_word_id, c.last_reviewed_at, w.translation, w.definition, w.example, w.language
          FROM anki_cards c
          LEFT JOIN saved_words w ON c.saved_word_id = w.id
-         WHERE c.user_id = $1 AND c.due_at <= $2
-         ORDER BY c.due_at ASC LIMIT 100`,
-        [uid, now()],
+         WHERE c.user_id = $1 AND c.due_at <= $2 AND c.due_at < $3
+         ORDER BY c.due_at ASC LIMIT 200`,
+        [uid, now(), suspendCutoff],
       );
       return send(res, 200, due.rows.map((c) => {
-        // Rebuild card back with translation if available and not already in back
         let back = c.back || "";
         if (c.translation && !back.includes("Translation:")) {
           const parts = [back, `Translation: ${c.translation}`].filter(Boolean);
           back = parts.join("\n\n");
-        } else if (c.translation) {
-          // Already has translation in back, keep as-is
-        } else if (c.definition && !back.includes(c.definition)) {
-          // Fallback: build from stored fields
+        } else if (!c.translation && c.definition && !back.includes(c.definition)) {
           const parts = [];
           if (c.definition) parts.push(c.definition);
           if (c.example) parts.push(`Context: ${c.example}`);
           back = parts.join("\n\n") || c.front;
         }
         const hasScreenshot = c.saved_word_id && existsSync(join(SCREENSHOTS_DIR, `${c.saved_word_id}.jpg`));
-        return { id: c.id, _id: c.id, front: c.front, back, box: c.box, dueAt: c.due_at, screenshotUrl: hasScreenshot ? `/api/screenshots/${c.saved_word_id}.jpg` : undefined };
+        return {
+          id: c.id,
+          _id: c.id,
+          front: c.front,
+          back,
+          box: c.box,
+          dueAt: c.due_at,
+          leechCount: c.leech_count || 0,
+          cardType: c.card_type || "word",
+          savedWordId: c.saved_word_id,
+          screenshotUrl: hasScreenshot ? `/api/screenshots/${c.saved_word_id}.jpg` : undefined,
+          language: c.language || undefined,
+        };
       }));
     }
     if (req.method === "GET" && path === "/api/cards/due-count") {
-      const n = await q1("SELECT COUNT(*)::int AS n FROM anki_cards WHERE user_id = $1 AND due_at <= $2", [uid, now()]);
-      return send(res, 200, n.n);
+      const suspendCutoff = now() + 300 * 86400000;
+      const n = await q1("SELECT COUNT(*)::int AS n FROM anki_cards WHERE user_id = $1 AND due_at <= $2 AND due_at < $3", [uid, now(), suspendCutoff]);
+      return send(res, 200, n?.n ?? 0);
     }
     if (req.method === "POST" && path === "/api/cards/rate") {
       const a = await body(req);
