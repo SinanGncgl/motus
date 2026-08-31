@@ -103,6 +103,7 @@ await pool.query(SCHEMA);
 await pool.query("ALTER TABLE saved_words ADD COLUMN IF NOT EXISTS translation TEXT").catch(() => {});
 await pool.query("ALTER TABLE anki_cards ADD COLUMN IF NOT EXISTS leech_count INTEGER DEFAULT 0").catch(() => {});
 await pool.query("ALTER TABLE anki_cards ADD COLUMN IF NOT EXISTS card_type TEXT DEFAULT 'word'").catch(() => {});
+await pool.query("ALTER TABLE anki_cards ADD COLUMN IF NOT EXISTS ease_factor REAL DEFAULT 2.5").catch(() => {});
 await pool.query(
   "INSERT INTO users (id,name,email,image,is_anonymous) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
   ["local-user", "Local learner", "local@localhost", null, true],
@@ -398,7 +399,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/api/cards/due") {
       const suspendCutoff = now() + 300 * 86400000;
       const due = await q(
-        `SELECT c.id, c.front, c.back, c.box, c.due_at, c.leech_count, c.card_type, c.saved_word_id, c.last_reviewed_at, w.translation, w.definition, w.example, w.language
+         `SELECT c.id, c.front, c.back, c.box, c.due_at, c.leech_count, c.card_type, c.saved_word_id, c.last_reviewed_at, c.ease_factor, w.translation, w.definition, w.example, w.language
          FROM anki_cards c
          LEFT JOIN saved_words w ON c.saved_word_id = w.id
          WHERE c.user_id = $1 AND c.due_at <= $2 AND c.due_at < $3
@@ -439,6 +440,7 @@ const server = createServer(async (req, res) => {
           savedWordId: c.saved_word_id,
           screenshotUrl: hasScreenshot ? `/api/screenshots/${c.saved_word_id}.jpg` : undefined,
           language: c.language || undefined,
+          easeFactor: c.ease_factor || 2.5,
         };
       }));
     }
@@ -449,43 +451,56 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && path === "/api/cards/next-due") {
       const suspendCutoff = now() + 300 * 86400000;
-      const r = await q1("SELECT MIN(due_at) AS next_due FROM anki_cards WHERE user_id = $1 AND due_at > $2 AND due_at < $3", [uid, now(), suspendCutoff]);
+      const r = await q1("SELECT MIN(due_at) AS next_due FROM anki_cards WHERE user_id = $1 AND due_at > $2 AND due_at < $3 AND (due_at - COALESCE(last_reviewed_at, created_at)) > 3600000", [uid, now(), suspendCutoff]);
       return send(res, 200, { nextDue: r?.next_due ?? null });
     }
     if (req.method === "POST" && path === "/api/cards/rate") {
       const a = await body(req);
       const c = await q1("SELECT * FROM anki_cards WHERE id = $1 AND user_id = $2", [a.cardId, uid]);
       if (!c) return fail(res, 404, "Card not found");
-      const intervals = [60000, 600000, 86400000, 259200000, 604800000, 1814400000];
+      const ease = c.ease_factor || 2.5;
+      const DAY = 86400000;
+      const LEARNING_STEP = 600000; // 10 minutes
       let newBox;
       let intervalMs;
-      switch (a.rating) {
-        case "again":
-          newBox = 0;
-          intervalMs = 300000;
-          break;
-        case "hard":
-          newBox = c.box;
-          intervalMs = Math.max(Math.floor(intervals[c.box] * 0.5), 600000);
-          break;
-        case "good":
-          newBox = Math.min(c.box + 1, 5);
-          intervalMs = intervals[newBox];
-          break;
-        case "easy":
-          newBox = Math.min(c.box + 2, 5);
-          intervalMs = intervals[newBox];
-          break;
-        default:
-          return fail(res, 400, "Invalid rating");
+      let newEase = ease;
+      const inLearning = c.box === 0 && (!c.last_reviewed_at || (now() - c.last_reviewed_at) < DAY);
+      if (inLearning) {
+        switch (a.rating) {
+          case "again":
+            newBox = 0; intervalMs = LEARNING_STEP; newEase = Math.max(ease - 0.2, 1.3); break;
+          case "hard":
+            newBox = 0; intervalMs = LEARNING_STEP; newEase = Math.max(ease - 0.15, 1.3); break;
+          case "good":
+            newBox = 1; intervalMs = DAY; break;
+          case "easy":
+            newBox = 2; intervalMs = 6 * DAY; newEase = ease + 0.15; break;
+          default: return fail(res, 400, "Invalid rating");
+        }
+      } else {
+        const currentInterval = c.due_at - (c.last_reviewed_at || c.created_at);
+        switch (a.rating) {
+          case "again":
+            newBox = 0; intervalMs = LEARNING_STEP; newEase = Math.max(ease - 0.2, 1.3); break;
+          case "hard":
+            newBox = Math.min(c.box + 1, 5); intervalMs = Math.max(currentInterval * 1.2, DAY); newEase = Math.max(ease - 0.15, 1.3); break;
+          case "good":
+            newBox = Math.min(c.box + 1, 5); intervalMs = currentInterval * ease; break;
+          case "easy":
+            newBox = Math.min(c.box + 2, 5); intervalMs = currentInterval * ease * 1.3; newEase = ease + 0.15; break;
+          default: return fail(res, 400, "Invalid rating");
+        }
       }
-      // Fuzz: add ±5% randomness to prevent card clustering
-      const fuzz = Math.floor(intervalMs * 0.05 * (Math.random() * 2 - 1));
-      const dueAt = now() + intervalMs + fuzz;
+      // Fuzz: ±5% randomness to prevent card clustering (not for learning steps)
+      if (intervalMs > DAY) {
+        const fuzz = Math.floor(intervalMs * 0.05 * (Math.random() * 2 - 1));
+        intervalMs += fuzz;
+      }
+      const dueAt = now() + intervalMs;
       const leechCount = a.rating === "again" ? (c.leech_count || 0) + 1 : 0;
       await q(
-        "UPDATE anki_cards SET box=$1, due_at=$2, last_reviewed_at=$3, leech_count=$4 WHERE id=$5",
-        [newBox, dueAt, now(), leechCount, c.id]
+        "UPDATE anki_cards SET box=$1, due_at=$2, last_reviewed_at=$3, leech_count=$4, ease_factor=$5 WHERE id=$6",
+        [newBox, dueAt, now(), leechCount, newEase, c.id]
       );
       return send(res, 200, { ok: true, leech: leechCount >= 3 });
     }
