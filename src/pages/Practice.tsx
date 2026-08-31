@@ -116,6 +116,7 @@ export default function Practice() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!current) return;
+      if (isRating) return;
       if (e.code === "Space" || e.code === "Enter") {
         e.preventDefault();
         setFlipped((f) => !f);
@@ -131,7 +132,7 @@ export default function Practice() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, [current, isRating]);
 
   // Auto-play pronunciation when a new card appears
   useEffect(() => {
@@ -146,15 +147,18 @@ export default function Practice() {
     setFlipped(false);
     setCorrectCount(0);
     setIncorrectCount(0);
+    setSessionRecorded(false);
   };
 
-  // Persist a session accuracy summary whenever the queue drains (a session
-  // ends). The Dashboard reads this back to show the last session's result.
+  const [sessionRecorded, setSessionRecorded] = useState(false);
+
+  // Persist a session accuracy summary when the queue drains (session ends).
   useEffect(() => {
-    if (reviewed.size > 0 && queue.length === 0) {
+    if (reviewed.size > 0 && queue.length === 0 && !sessionRecorded) {
       session.record(reviewed.size, correctCount);
+      setSessionRecorded(true);
     }
-  }, [queue.length, reviewed.size, correctCount]);
+  }, [queue.length, reviewed.size, correctCount, sessionRecorded]);
 
   if (due === undefined) {
     return (
@@ -362,7 +366,7 @@ export default function Practice() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <p className="text-xl font-semibold tracking-tight">
-                    {current.cardType === "sentence" ? current.front : current.front}
+                    {current.front}
                   </p>
                   {current.cardType === "word" && (
                     <SpeakerButton
@@ -418,7 +422,7 @@ export default function Practice() {
         </div>
 
         {/* Rating controls */}
-        <div className="mt-6 grid grid-cols-4 gap-3">
+        <div className="mt-6 grid grid-cols-4 gap-3" onClick={(e) => e.stopPropagation()}>
           <Button
             type="button"
             variant="outline"

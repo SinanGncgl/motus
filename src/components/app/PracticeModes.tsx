@@ -72,6 +72,7 @@ export function ClozePractice({ words, cards, onResult, onRate }: {
   }
 
   const submit = () => {
+    if (checked !== null) return;
     const ok = answerMatches(answer, current.display);
     setChecked(ok);
     onResult?.(ok);
@@ -280,7 +281,7 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
           autoFocus
           onChange={(e) => setAnswer(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && !revealed) {
               const ok = answerMatches(answer, current.sentence);
               setRevealed(true);
               onResult?.(ok);
@@ -307,6 +308,7 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
             variant="outline"
             className="cursor-pointer"
             onClick={() => {
+              if (revealed) return;
               const ok = answerMatches(answer, current.sentence);
               setRevealed(true);
               onResult?.(ok);
