@@ -462,11 +462,11 @@ const server = createServer(async (req, res) => {
       switch (a.rating) {
         case "again":
           newBox = 0;
-          intervalMs = 60000;
+          intervalMs = 300000;
           break;
         case "hard":
           newBox = c.box;
-          intervalMs = Math.max(Math.floor(intervals[c.box] * 0.5), 360000);
+          intervalMs = Math.max(Math.floor(intervals[c.box] * 0.5), 600000);
           break;
         case "good":
           newBox = Math.min(c.box + 1, 5);
