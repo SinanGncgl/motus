@@ -101,6 +101,7 @@ function formatCardBack(a, fallbackWord) {
 await pool.query(SCHEMA);
 // Migration: add translation column to saved_words if missing
 await pool.query("ALTER TABLE saved_words ADD COLUMN IF NOT EXISTS translation TEXT").catch(() => {});
+await pool.query("ALTER TABLE anki_cards ADD COLUMN IF NOT EXISTS leech_count INTEGER DEFAULT 0").catch(() => {});
 await pool.query(
   "INSERT INTO users (id,name,email,image,is_anonymous) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
   ["local-user", "Local learner", "local@localhost", null, true],
@@ -397,11 +398,36 @@ const server = createServer(async (req, res) => {
       const a = await body(req);
       const c = await q1("SELECT * FROM anki_cards WHERE id = $1 AND user_id = $2", [a.cardId, uid]);
       if (!c) return fail(res, 404, "Card not found");
-      const box = a.rating === "again" ? 0 : Math.min(c.box + (a.rating === "easy" ? 2 : 1), 5);
       const intervals = [60000, 600000, 86400000, 259200000, 604800000, 1814400000];
-      const dueAt = now() + (a.rating === "again" ? 60000 : intervals[box]);
-      await q("UPDATE anki_cards SET box=$1, due_at=$2, last_reviewed_at=$3 WHERE id=$4", [box, dueAt, now(), c.id]);
-      return send(res, 200, { ok: true });
+      let newBox;
+      let intervalMs;
+      switch (a.rating) {
+        case "again":
+          newBox = 0;
+          intervalMs = 60000;
+          break;
+        case "hard":
+          newBox = c.box;
+          intervalMs = Math.floor(intervals[c.box] * 0.5);
+          break;
+        case "good":
+          newBox = Math.min(c.box + 1, 5);
+          intervalMs = intervals[newBox];
+          break;
+        case "easy":
+          newBox = Math.min(c.box + 2, 5);
+          intervalMs = intervals[newBox];
+          break;
+        default:
+          return fail(res, 400, "Invalid rating");
+      }
+      const dueAt = now() + intervalMs;
+      const leechCount = a.rating === "again" ? (c.leech_count || 0) + 1 : 0;
+      await q(
+        "UPDATE anki_cards SET box=$1, due_at=$2, last_reviewed_at=$3, leech_count=$4 WHERE id=$5",
+        [newBox, dueAt, now(), leechCount, c.id]
+      );
+      return send(res, 200, { ok: true, leech: leechCount >= 3 });
     }
 
     if (req.method === "POST" && path === "/api/transcript") { const a = await body(req); return send(res, 200, { videoId: a.videoId, lines: await transcript(a.videoId, a.lang) }); }
