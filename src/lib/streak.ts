@@ -146,9 +146,36 @@ export const session = {
       at: Date.now(),
     };
     writeSession(summary);
+    sessionHistory.add(summary);
     return summary;
   },
   last(): SessionSummary | null {
     return readSession();
+  },
+};
+
+/* ------------------------------------------------------------------ *
+ * Session history – persistent list of all past sessions.
+ * ------------------------------------------------------------------ */
+
+const HISTORY_KEY = "motus.session-history.v1";
+
+export const sessionHistory = {
+  getAll(): SessionSummary[] {
+    try {
+      return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  },
+  add(record: SessionSummary) {
+    const history = this.getAll();
+    history.push(record);
+    if (history.length > 50) history.splice(0, history.length - 50);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  },
+  lastDays(days: number): SessionSummary[] {
+    const cutoff = Date.now() - days * 86400000;
+    return this.getAll().filter((s) => s.at >= cutoff);
   },
 };
