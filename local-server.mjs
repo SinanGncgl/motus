@@ -101,19 +101,14 @@ function formatCardBack(a, fallbackWord) {
 }
 
 // Initialize schema + seed default user.
+await pool.query("DROP TABLE IF EXISTS anki_cards CASCADE");
+await pool.query("DROP TABLE IF EXISTS saved_words CASCADE");
 await pool.query(SCHEMA);
-// Migration: add translation column to saved_words if missing
-await pool.query("ALTER TABLE saved_words ADD COLUMN IF NOT EXISTS translation TEXT").catch(() => {});
-await pool.query("ALTER TABLE anki_cards ADD COLUMN IF NOT EXISTS leech_count INTEGER DEFAULT 0").catch(() => {});
-await pool.query("ALTER TABLE anki_cards ADD COLUMN IF NOT EXISTS card_type TEXT DEFAULT 'word'").catch(() => {});
-await pool.query("ALTER TABLE anki_cards ADD COLUMN IF NOT EXISTS ease_factor REAL DEFAULT 2.5").catch(() => {});
 await pool.query(
   "INSERT INTO users (id,name,email,image,is_anonymous) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
   ["local-user", "Local learner", "local@localhost", null, true],
 );
-// Clean slate: remove saved words and cards, keep videos/subtitles
-await pool.query("DELETE FROM anki_cards").catch(() => {});
-await pool.query("DELETE FROM saved_words").catch(() => {});
+// Clean screenshots
 try { for (const f of await readdir(SCREENSHOTS_DIR)) await unlink(`${SCREENSHOTS_DIR}/${f}`); } catch {}
 
 // ---- query helpers ----
