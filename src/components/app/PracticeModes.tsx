@@ -17,8 +17,13 @@ import { toast } from "sonner";
 
 /* ---------------- Cloze (fill-in-the-blank) ---------------- */
 
-export function ClozePractice({ words, onResult }: { words: LocalWord[]; onResult?: (correct: boolean) => void }) {
-  const items = useMemo(() => buildClozeItems(words), [words]);
+export function ClozePractice({ words, cards, onResult, onRate }: {
+  words: LocalWord[];
+  cards?: Array<{ id: string; _id?: string; front: string }>;
+  onResult?: (correct: boolean) => void;
+  onRate?: (cardId: string, rating: "again" | "hard" | "good" | "easy") => void;
+}) {
+  const items = useMemo(() => buildClozeItems(words, cards), [words, cards]);
   const [idx, setIdx] = useState(0);
   const [answer, setAnswer] = useState("");
   const [checked, setChecked] = useState<null | boolean>(null);
@@ -70,6 +75,7 @@ export function ClozePractice({ words, onResult }: { words: LocalWord[]; onResul
     const ok = answerMatches(answer, current.display);
     setChecked(ok);
     onResult?.(ok);
+    onRate?.(current.cardId, ok ? "good" : "again");
     if (ok) {
       setCorrect((c) => c + 1);
       toast.success("Correct!");
@@ -146,6 +152,7 @@ export function ClozePractice({ words, onResult }: { words: LocalWord[]; onResul
               variant="outline"
               className="cursor-pointer"
               onClick={() => {
+                onRate?.(current.cardId, "again");
                 setIncorrect((c) => c + 1);
                 setIdx((i) => i + 1);
                 setAnswer("");
@@ -176,8 +183,13 @@ export function ClozePractice({ words, onResult }: { words: LocalWord[]; onResul
 
 /* ---------------- Dictation (listen & type) ---------------- */
 
-export function DictationPractice({ words, onResult }: { words: LocalWord[]; onResult?: (correct: boolean) => void }) {
-  const items = useMemo(() => buildDictationItems(words), [words]);
+export function DictationPractice({ words, cards, onResult, onRate }: {
+  words: LocalWord[];
+  cards?: Array<{ id: string; _id?: string; front: string }>;
+  onResult?: (correct: boolean) => void;
+  onRate?: (cardId: string, rating: "again" | "hard" | "good" | "easy") => void;
+}) {
+  const items = useMemo(() => buildDictationItems(words, cards), [words, cards]);
   const [idx, setIdx] = useState(0);
   const [answer, setAnswer] = useState("");
   const [revealed, setRevealed] = useState(false);
@@ -273,6 +285,7 @@ export function DictationPractice({ words, onResult }: { words: LocalWord[]; onR
               const ok = answerMatches(answer, current.sentence);
               setRevealed(true);
               onResult?.(ok);
+              onRate?.(current.cardId, ok ? "good" : "again");
               if (ok) setCorrect((c) => c + 1);
               else setIncorrect((c) => c + 1);
             }
@@ -298,6 +311,7 @@ export function DictationPractice({ words, onResult }: { words: LocalWord[]; onR
               const ok = answerMatches(answer, current.sentence);
               setRevealed(true);
               onResult?.(ok);
+              onRate?.(current.cardId, ok ? "good" : "again");
               if (ok) setCorrect((c) => c + 1);
               else setIncorrect((c) => c + 1);
             }}

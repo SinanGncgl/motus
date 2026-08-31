@@ -395,17 +395,37 @@ export default function Practice() {
           {mode === "cloze" ? (
             <ClozePractice
               words={(allWords ?? []) as LocalWord[]}
+              cards={due ?? []}
               onResult={(ok) => {
                 if (ok) setCorrectCount((c) => c + 1);
                 else setIncorrectCount((c) => c + 1);
+              }}
+              onRate={async (cardId, rating) => {
+                try {
+                  await localApi.cards.rate(cardId, rating);
+                  await refreshDue();
+                  streak.record(1);
+                } catch {
+                  // SRS update is best-effort
+                }
               }}
             />
           ) : (
             <DictationPractice
               words={(allWords ?? []) as LocalWord[]}
+              cards={due ?? []}
               onResult={(ok) => {
                 if (ok) setCorrectCount((c) => c + 1);
                 else setIncorrectCount((c) => c + 1);
+              }}
+              onRate={async (cardId, rating) => {
+                try {
+                  await localApi.cards.rate(cardId, rating);
+                  await refreshDue();
+                  streak.record(1);
+                } catch {
+                  // SRS update is best-effort
+                }
               }}
             />
           )}

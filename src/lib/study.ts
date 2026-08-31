@@ -60,18 +60,27 @@ export async function saveWord(input: SaveWordInput): Promise<{
 
 export interface ClozeItem {
   wordId: string;
-  display: string; // the word to fill in
-  sentence: string; // example sentence with the target replaced by a blank
+  cardId: string;
+  display: string;
+  sentence: string;
 }
 
 export interface DictationItem {
   wordId: string;
+  cardId: string;
   display: string;
-  sentence: string; // sentence to listen to and type
+  sentence: string;
 }
 
 /** Build cloze items from saved words that have a usable example sentence. */
-export function buildClozeItems(words: LocalWord[]): ClozeItem[] {
+export function buildClozeItems(words: LocalWord[], cards?: Array<{ id: string; _id?: string; front: string }>): ClozeItem[] {
+  const cardByWord = new Map<string, string>();
+  if (cards) {
+    for (const c of cards) {
+      const front = c.front.toLowerCase();
+      if (!cardByWord.has(front)) cardByWord.set(front, c.id || c._id || "");
+    }
+  }
   const items: ClozeItem[] = [];
   for (const w of words) {
     const ex = (w.example || "").trim();
@@ -80,17 +89,26 @@ export function buildClozeItems(words: LocalWord[]): ClozeItem[] {
     const re = new RegExp(`\\b${escapeRegExp(normalized)}\\b`, "i");
     if (!re.test(ex)) continue;
     const sentence = ex.replace(re, " ____ ");
-    items.push({ wordId: w._id, display: w.display, sentence });
+    const cardId = cardByWord.get(normalized) || w._id;
+    items.push({ wordId: w._id, cardId, display: w.display, sentence });
   }
   return shuffle(items);
 }
 
 /** Build dictation items: speak the example, type what you hear. */
-export function buildDictationItems(words: LocalWord[]): DictationItem[] {
+export function buildDictationItems(words: LocalWord[], cards?: Array<{ id: string; _id?: string; front: string }>): DictationItem[] {
+  const cardByWord = new Map<string, string>();
+  if (cards) {
+    for (const c of cards) {
+      const front = c.front.toLowerCase();
+      if (!cardByWord.has(front)) cardByWord.set(front, c.id || c._id || "");
+    }
+  }
   const items = words
     .filter((w) => (w.example || "").trim().length > 0)
     .map((w) => ({
       wordId: w._id,
+      cardId: cardByWord.get(w.display.trim().toLowerCase()) || w._id,
       display: w.display,
       sentence: w.example!.trim(),
     }));
