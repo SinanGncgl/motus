@@ -46,7 +46,8 @@ export const localApi = {
         body: JSON.stringify({ storageId, language, model }),
       }).then((resp) => {
         if (!resp.ok) return resp.json().then((d) => { throw new Error(d.error || `HTTP ${resp.status}`); });
-        const reader = resp.body!.getReader();
+        if (!resp.body) return reject(new Error("No response body"));
+        const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buf = "";
         const process = () => {

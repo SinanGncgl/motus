@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/empty";
 import { useLocalWords, useDueCount, useLocalSubtitles } from "@/hooks/use-local-data";
 import { settings } from "@/lib/settings";
-import { session, streak } from "@/lib/streak";
+import { streak } from "@/lib/streak";
 import { languageLabel } from "@/lib/tts";
 import { localApi } from "@/lib/local-api";
 import {

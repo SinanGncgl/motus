@@ -26,10 +26,7 @@ export async function captureFrame(
 ): Promise<Blob | null> {
   try {
     const player = playerRef.current?.getInternalPlayer?.();
-    if (!player || player.videoWidth <= 0) {
-      console.log("[captureFrame] no player or video not ready", { player: !!player, videoWidth: player?.videoWidth });
-      return null;
-    }
+    if (!player || player.videoWidth <= 0) return null;
     const canvas = document.createElement("canvas");
     canvas.width = player.videoWidth;
     canvas.height = player.videoHeight;
@@ -43,10 +40,8 @@ export async function captureFrame(
         0.85,
       );
     });
-    console.log("[captureFrame] captured", { width: canvas.width, height: canvas.height, blobSize: blob?.size });
     return blob;
-  } catch (e) {
-    console.log("[captureFrame] error", e);
+  } catch {
     return null;
   }
 }

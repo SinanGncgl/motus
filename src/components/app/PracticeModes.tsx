@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { SpeakerButton } from "@/components/app/SpeakerButton";
 import { LocalWord } from "@/lib/local-api";
 import {
   answerMatches,
@@ -14,6 +13,48 @@ import { speak } from "@/lib/tts";
 import { Check, Loader2, RotateCcw, Volume2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
+/* ---------------- Shared components ---------------- */
+
+function SessionComplete({ count, label, correct, incorrect, onReset }: {
+  count: number;
+  label: string;
+  correct: number;
+  incorrect: number;
+  onReset: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card p-8 text-center shadow-sm">
+      <Check className="mx-auto size-8 text-emerald-500" />
+      <p className="mt-3 text-lg font-semibold">Session complete</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        You completed {count} {count === 1 ? label : `${label}s`}.
+      </p>
+      {count > 0 && (correct > 0 || incorrect > 0) && (
+        <p className="text-xs text-muted-foreground">
+          {correct} correct · {incorrect} to revisit
+        </p>
+      )}
+      <Button className="mt-4 cursor-pointer gap-2" onClick={onReset}>
+        <RotateCcw className="size-4" /> Start over
+      </Button>
+    </div>
+  );
+}
+
+function ScoreBar({ correct, incorrect }: { correct: number; incorrect: number }) {
+  if (correct === 0 && incorrect === 0) return null;
+  return (
+    <div className="-mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1">
+        <Check className="size-3 text-emerald-500" /> {correct}
+      </span>
+      <span className="flex items-center gap-1">
+        <X className="size-3 text-destructive" /> {incorrect}
+      </span>
+    </div>
+  );
+}
 
 /* ---------------- Cloze (fill-in-the-blank) ---------------- */
 
@@ -53,21 +94,13 @@ export function ClozePractice({ words, cards, onResult, onRate }: {
 
   if (!current) {
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center shadow-sm">
-        <Check className="mx-auto size-8 text-emerald-500" />
-        <p className="mt-3 text-lg font-semibold">Session complete</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          You completed {done} cloze {done === 1 ? "sentence" : "sentences"}.
-        </p>
-        {done > 0 && (correct > 0 || incorrect > 0) && (
-          <p className="text-xs text-muted-foreground">
-            {correct} correct · {incorrect} to revisit
-          </p>
-        )}
-        <Button className="mt-4 cursor-pointer gap-2" onClick={reset}>
-          <RotateCcw className="size-4" /> Start over
-        </Button>
-      </div>
+      <SessionComplete
+        count={done}
+        label="cloze sentence"
+        correct={correct}
+        incorrect={incorrect}
+        onReset={reset}
+      />
     );
   }
 
@@ -97,16 +130,7 @@ export function ClozePractice({ words, cards, onResult, onRate }: {
         </span>
         <Badge variant="secondary">{done} done</Badge>
       </div>
-      {(correct > 0 || incorrect > 0) && (
-        <div className="-mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Check className="size-3 text-emerald-500" /> {correct}
-          </span>
-          <span className="flex items-center gap-1">
-            <X className="size-3 text-destructive" /> {incorrect}
-          </span>
-        </div>
-      )}
+      <ScoreBar correct={correct} incorrect={incorrect} />
       <div className="rounded-2xl border bg-card p-6 shadow-sm">
         <p className="text-lg leading-8">
           {current.sentence.split(" ____ ").map((part, i, arr) => (
@@ -224,21 +248,13 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
 
   if (!current) {
     return (
-      <div className="rounded-2xl border bg-card p-8 text-center shadow-sm">
-        <Check className="mx-auto size-8 text-emerald-500" />
-        <p className="mt-3 text-lg font-semibold">Session complete</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          You dictated {done} {done === 1 ? "sentence" : "sentences"}.
-        </p>
-        {done > 0 && (correct > 0 || incorrect > 0) && (
-          <p className="text-xs text-muted-foreground">
-            {correct} correct · {incorrect} to revisit
-          </p>
-        )}
-        <Button className="mt-4 cursor-pointer gap-2" onClick={reset}>
-          <RotateCcw className="size-4" /> Start over
-        </Button>
-      </div>
+      <SessionComplete
+        count={done}
+        label="sentence"
+        correct={correct}
+        incorrect={incorrect}
+        onReset={reset}
+      />
     );
   }
 
@@ -252,16 +268,7 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
         </span>
         <Badge variant="secondary">{done} done</Badge>
       </div>
-      {(correct > 0 || incorrect > 0) && (
-        <div className="-mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Check className="size-3 text-emerald-500" /> {correct}
-          </span>
-          <span className="flex items-center gap-1">
-            <X className="size-3 text-destructive" /> {incorrect}
-          </span>
-        </div>
-      )}
+      <ScoreBar correct={correct} incorrect={incorrect} />
       <div className="rounded-2xl border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-3">
           <Button

@@ -27,7 +27,7 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -80,13 +80,11 @@ export default function Practice() {
     }
   }, [due, againQueue.length, reviewed.size]);
 
-  const handleRate = async (rating: "again" | "hard" | "good" | "easy") => {
+  const handleRate = useCallback(async (rating: "again" | "hard" | "good" | "easy") => {
     if (!current || isRating) return;
-    // Drop focus so Space doesn't re-trigger the rating button while flipping.
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
-    // Score: "again" means the card wasn't recalled; "good"/"easy" means it was.
     if (rating === "again") setIncorrectCount((n) => n + 1);
     else setCorrectCount((n) => n + 1);
     setIsRating(true);
@@ -98,10 +96,11 @@ export default function Practice() {
         next.add(current.id ?? current._id ?? "");
         return next;
       });
+      const cid = current.id ?? current._id;
       if (rating === "again") {
         setAgainQueue((q) => [...q, current]);
       } else {
-        setAgainQueue((q) => q.filter((c) => c._id !== current._id));
+        setAgainQueue((q) => q.filter((c) => (c.id ?? c._id) !== cid));
       }
       setFlipped(false);
       streak.record(1);
@@ -111,7 +110,7 @@ export default function Practice() {
     } finally {
       setIsRating(false);
     }
-  };
+  }, [current, isRating]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -132,7 +131,7 @@ export default function Practice() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, isRating]);
+  }, [handleRate]);
 
   // Auto-play pronunciation when a new card appears
   useEffect(() => {
