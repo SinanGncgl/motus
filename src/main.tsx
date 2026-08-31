@@ -5,6 +5,15 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 
+// One-time cleanup: clear stale localStorage from previous DB resets
+const CLEANUP_KEY = "motus.cleaned.v1";
+if (!localStorage.getItem(CLEANUP_KEY)) {
+  localStorage.removeItem("motus.streak.v1");
+  localStorage.removeItem("motus.session.v1");
+  localStorage.removeItem("motus.session-history.v1");
+  localStorage.setItem(CLEANUP_KEY, "1");
+}
+
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const Words = lazy(() => import("./pages/Words.tsx"));
 const Practice = lazy(() => import("./pages/Practice.tsx"));
