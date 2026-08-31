@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname } from "node:path";
 import { homedir } from "node:os";
@@ -78,7 +78,10 @@ CREATE TABLE IF NOT EXISTS anki_cards (
   box INTEGER DEFAULT 0,
   due_at BIGINT,
   last_reviewed_at BIGINT,
-  created_at BIGINT
+  created_at BIGINT,
+  leech_count INTEGER DEFAULT 0,
+  card_type TEXT DEFAULT 'word',
+  ease_factor REAL DEFAULT 2.5
 );
 CREATE INDEX IF NOT EXISTS idx_sub_user ON subtitles(user_id);
 CREATE INDEX IF NOT EXISTS idx_word_user ON saved_words(user_id);
@@ -108,6 +111,10 @@ await pool.query(
   "INSERT INTO users (id,name,email,image,is_anonymous) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
   ["local-user", "Local learner", "local@localhost", null, true],
 );
+// Clean slate: remove saved words and cards, keep videos/subtitles
+await pool.query("DELETE FROM anki_cards").catch(() => {});
+await pool.query("DELETE FROM saved_words").catch(() => {});
+try { for (const f of await readdir(SCREENSHOTS_DIR)) await unlink(`${SCREENSHOTS_DIR}/${f}`); } catch {}
 
 // ---- query helpers ----
 const q = (text, params = []) => pool.query(text, params);
@@ -483,7 +490,7 @@ const server = createServer(async (req, res) => {
           case "again":
             newBox = 0; intervalMs = LEARNING_STEP; newEase = Math.max(ease - 0.2, 1.3); break;
           case "hard":
-            newBox = Math.min(c.box + 1, 5); intervalMs = Math.max(currentInterval * 1.2, DAY); newEase = Math.max(ease - 0.15, 1.3); break;
+            newBox = c.box; intervalMs = Math.max(currentInterval * 1.2, DAY); newEase = Math.max(ease - 0.15, 1.3); break;
           case "good":
             newBox = Math.min(c.box + 1, 5); intervalMs = currentInterval * ease; break;
           case "easy":
