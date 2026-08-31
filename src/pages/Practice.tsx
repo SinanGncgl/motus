@@ -9,10 +9,12 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { SpeakerButton } from "@/components/app/SpeakerButton";
 import { useDueCards, useLocalWords } from "@/hooks/use-local-data";
 import { session, streak } from "@/lib/streak";
 import { localApi, type LocalCard, type LocalWord } from "@/lib/local-api";
 import { ClozePractice, DictationPractice } from "@/components/app/PracticeModes";
+import { speak } from "@/lib/tts";
 import type { PracticeMode } from "@/lib/study";
 import { motion } from "framer-motion";
 import {
@@ -49,6 +51,10 @@ export default function Practice() {
     const fresh = (due ?? []).filter((c) => !reviewed.has(c.id ?? c._id ?? ""));
     return [...fresh, ...againQueue];
   }, [due, reviewed, againQueue]);
+
+  const newCount = useMemo(() => {
+    return queue.filter((c) => c.box === 0).length;
+  }, [queue]);
 
   const current = queue[0] ?? null;
   const reviewedCount = reviewed.size;
@@ -106,6 +112,13 @@ export default function Practice() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  // Auto-play pronunciation when a new card appears
+  useEffect(() => {
+    if (current && mode === "flashcard" && !flipped) {
+      speak(current.front, current.language || "de");
+    }
+  }, [current?.id, mode, flipped]);
 
   const resetSession = () => {
     setReviewed(new Set());
@@ -252,6 +265,12 @@ export default function Practice() {
             <span className="size-2 rounded-full bg-destructive" />
             {incorrectCount} to revisit
           </span>
+          {newCount > 0 && (
+            <span className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-sky-500" />
+              {newCount} new
+            </span>
+          )}
         </div>
       )}
 
@@ -274,19 +293,37 @@ export default function Practice() {
               className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-2xl border bg-card p-10 shadow-lg"
               style={{ backfaceVisibility: "hidden" }}
             >
-              <Badge variant="outline" className="text-xs font-normal">
-                Do you know this word?
-              </Badge>
-              {current.screenshotUrl && (
-                <img
-                  src={current.screenshotUrl}
-                  alt=""
-                  className="w-full max-h-32 rounded-lg object-cover"
-                />
+              {current.cardType === "sentence" ? (
+                <>
+                  <Badge variant="outline" className="text-xs font-normal">
+                    Fill in the blank
+                  </Badge>
+                  <p className="text-center text-2xl leading-8 text-foreground/90">
+                    {current.front}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Badge variant="outline" className="text-xs font-normal">
+                    Do you know this word?
+                  </Badge>
+                  <SpeakerButton
+                    text={current.front}
+                    lang={current.language || "de"}
+                    label="Pronounce"
+                  />
+                  {current.screenshotUrl && (
+                    <img
+                      src={current.screenshotUrl}
+                      alt=""
+                      className="w-full max-h-32 rounded-lg object-cover"
+                    />
+                  )}
+                  <p className="text-center text-4xl font-semibold tracking-tight">
+                    {current.front}
+                  </p>
+                </>
               )}
-              <p className="text-center text-4xl font-semibold tracking-tight">
-                {current.front}
-              </p>
               <p className="text-xs text-muted-foreground">
                 Click to reveal the answer
               </p>
@@ -300,15 +337,31 @@ export default function Practice() {
               }}
             >
               <div className="flex items-center justify-between">
-                <p className="text-xl font-semibold tracking-tight">
-                  {current.front}
-                </p>
-                <Badge variant="secondary">
-                  Box {current.box + 1}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <p className="text-xl font-semibold tracking-tight">
+                    {current.cardType === "sentence" ? current.front : current.front}
+                  </p>
+                  {current.cardType === "word" && (
+                    <SpeakerButton
+                      text={current.front}
+                      lang={current.language || "de"}
+                      label="Pronounce"
+                    />
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {(current.leechCount ?? 0) >= 3 && (
+                    <Badge variant="outline" className="border-amber-500 text-amber-600">
+                      Leech
+                    </Badge>
+                  )}
+                  <Badge variant="secondary">
+                    Box {current.box + 1}
+                  </Badge>
+                </div>
               </div>
               <div className="flex flex-col gap-4 overflow-y-auto">
-                {current.screenshotUrl && (
+                {current.screenshotUrl && current.cardType === "word" && (
                   <img
                     src={current.screenshotUrl}
                     alt=""
@@ -321,6 +374,22 @@ export default function Practice() {
                   </p>
                 )}
               </div>
+              {(current.leechCount ?? 0) >= 3 && (
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      await localApi.cards.suspend(current.id ?? current._id ?? "");
+                      await refreshDue();
+                      toast.success("Card suspended");
+                    }}
+                  >
+                    Suspend
+                  </Button>
+                </div>
+              )}
             </div>
           </motion.div>
         </div>
