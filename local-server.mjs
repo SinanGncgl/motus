@@ -405,7 +405,20 @@ const server = createServer(async (req, res) => {
          ORDER BY c.due_at ASC LIMIT 200`,
         [uid, now(), suspendCutoff],
       );
-      return send(res, 200, due.rows.map((c) => {
+      // Limit new cards per day
+      const newCardsLimit = parseInt(u.searchParams.get("newCardsLimit") || "10", 10);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayStartMs = todayStart.getTime();
+      let newCardsSeen = 0;
+      const filtered = due.rows.filter((c) => {
+        if (c.box === 0 && (!c.last_reviewed_at || c.last_reviewed_at >= todayStartMs)) {
+          newCardsSeen++;
+          return newCardsSeen <= newCardsLimit;
+        }
+        return true;
+      });
+      return send(res, 200, filtered.map((c) => {
         let back = c.back || "";
         if (c.translation && !back.includes("Translation:")) {
           const parts = [back, `Translation: ${c.translation}`].filter(Boolean);

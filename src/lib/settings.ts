@@ -6,6 +6,8 @@ export interface AppSettings {
   includeCommonWords: boolean;
   /** Target reviews per day for the streak/goal widget. */
   dailyGoal: number;
+  /** How many new words to introduce each day (0-50). */
+  newCardsPerDay: number;
   /** Auto-pause playback after each caption line (shadowing practice). */
   autoPausePerLine: boolean;
   /** Auto-translate the active caption line into your native language. */
@@ -27,6 +29,7 @@ const KEY = "motus.settings.v1";
 const DEFAULTS: AppSettings = {
   includeCommonWords: false,
   dailyGoal: 20,
+  newCardsPerDay: 10,
   autoPausePerLine: false,
   autoTranslateCaptions: false,
   sourceLanguage: "auto",

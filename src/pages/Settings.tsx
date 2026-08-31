@@ -22,6 +22,7 @@ export default function Settings() {
     settings.get().includeCommonWords,
   );
   const [dailyGoal, setDailyGoal] = useState(settings.get().dailyGoal);
+  const [newCardsPerDay, setNewCardsPerDay] = useState(settings.get().newCardsPerDay);
   const [autoPause, setAutoPause] = useState(settings.get().autoPausePerLine);
   const [autoTranslate, setAutoTranslate] = useState(
     settings.get().autoTranslateCaptions,
@@ -36,6 +37,7 @@ export default function Settings() {
     settings.update({
       includeCommonWords: includeCommon,
       dailyGoal: Math.max(1, Math.min(200, Math.round(dailyGoal) || 20)),
+      newCardsPerDay: Math.max(0, Math.min(50, Math.round(newCardsPerDay) || 10)),
       autoPausePerLine: autoPause,
       autoTranslateCaptions: autoTranslate,
       sourceLanguage: sourceLang,
@@ -101,6 +103,21 @@ export default function Settings() {
             onChange={(e) => setDailyGoal(Number(e.target.value))}
             className="w-32"
           />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="newCards">New cards per day</Label>
+          <Input
+            id="newCards"
+            type="number"
+            min={0}
+            max={50}
+            value={newCardsPerDay}
+            onChange={(e) => setNewCardsPerDay(Number(e.target.value))}
+            className="w-32"
+          />
+          <p className="text-xs text-muted-foreground">
+            How many new words to introduce each day (0-50).
+          </p>
         </div>
       </div>
 
