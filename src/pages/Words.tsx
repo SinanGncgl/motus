@@ -106,10 +106,28 @@ export default function Words() {
 
   const handleExport = () => {
     if (!words || words.length === 0) return;
-    const rows = words.map((w) => ({
-      front: w.display,
-      back: [w.definition, w.example].filter(Boolean).join("\n\n"),
-    }));
+    const rows = words.map((w) => {
+      // Build rich front with word and optional screenshot
+      const frontParts = [w.display];
+      if (w.screenshotUrl) {
+        frontParts.push(`<img src="${w.screenshotUrl}" />`);
+      }
+      const front = frontParts.join("<br>");
+
+      // Build rich back with definition, context, translation, source, and audio
+      const backParts: string[] = [];
+      if (w.definition) backParts.push(w.definition);
+      if (w.example) backParts.push(`<br><b>Context:</b> ${w.example}`);
+      if (w.translation) backParts.push(`<br><b>Translation:</b> ${w.translation}`);
+      if (w.sourceTitle) backParts.push(`<br><i>${w.sourceTitle}</i>`);
+      // Add TTS audio link (Google Translate TTS)
+      const lang = w.language || "de";
+      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=tw-ob&q=${encodeURIComponent(w.display)}`;
+      backParts.push(`<br>[sound:${ttsUrl}]`);
+      const back = backParts.join("");
+
+      return { front, back };
+    });
     const tsv = buildAnkiTsv(rows);
     const stamp = new Date().toISOString().slice(0, 10);
     downloadFile(`motus-anki-${stamp}.tsv`, tsv);
