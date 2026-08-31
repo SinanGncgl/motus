@@ -48,7 +48,7 @@ import {
 import { LANGUAGES, languageLabel, speak } from "@/lib/tts";
 import { useSavedWords } from "@/hooks/use-saved-words";
 import { cn } from "@/lib/utils";
-import { captureFrame, type PlayerHandle } from "@/lib/player";
+import { captureFrame, captureScreenCrop, type PlayerHandle } from "@/lib/player";
 import {
   copyToClipboard,
   detectLocalGrabber,
@@ -158,6 +158,7 @@ function WatchContent({ id }: { id: string }) {
   }, [id]);
 
   const playerRef = useRef<PlayerHandle | null>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
   const [time, setTime] = useState(0);
@@ -405,12 +406,9 @@ function WatchContent({ id }: { id: string }) {
     playerRef.current?.pauseVideo();
     if (!subtitle) return;
     let screenshot = await captureFrame(playerRef);
-    // For YouTube videos, captureFrame returns null (CORS). Use thumbnail as fallback.
-    if (!screenshot && subtitle.videoId) {
-      try {
-        const resp = await fetch(`https://i.ytimg.com/vi/${subtitle.videoId}/hqdefault.jpg`);
-        if (resp.ok) screenshot = await resp.blob();
-      } catch {}
+    // For YouTube videos, captureFrame returns null (CORS). Use screen capture.
+    if (!screenshot && subtitle.videoId && videoContainerRef.current) {
+      screenshot = await captureScreenCrop(videoContainerRef.current);
     }
     void save({
       word: tokenWord,
@@ -477,12 +475,9 @@ function WatchContent({ id }: { id: string }) {
   const saveCurrentSentence = async () => {
     if (!activeLine || !subtitle) return;
     let screenshot = await captureFrame(playerRef);
-    // For YouTube videos, use thumbnail as fallback
-    if (!screenshot && subtitle.videoId) {
-      try {
-        const resp = await fetch(`https://i.ytimg.com/vi/${subtitle.videoId}/hqdefault.jpg`);
-        if (resp.ok) screenshot = await resp.blob();
-      } catch {}
+    // For YouTube videos, use screen capture
+    if (!screenshot && subtitle.videoId && videoContainerRef.current) {
+      screenshot = await captureScreenCrop(videoContainerRef.current);
     }
     let count = 0;
     for (const token of tokenize(activeLine.text)) {
@@ -908,7 +903,7 @@ function WatchContent({ id }: { id: string }) {
           <section className="flex min-w-0 flex-col gap-3">
             {hasMedia ? (
               <>
-                <div className="relative aspect-video w-full overflow-hidden rounded-2xl border bg-black shadow-lg">
+                <div ref={videoContainerRef} className="relative aspect-video w-full overflow-hidden rounded-2xl border bg-black shadow-lg">
                   {subtitle.videoId ? (
                     <YouTubePlayer
                       videoId={subtitle.videoId}

@@ -50,3 +50,44 @@ export async function captureFrame(
     return null;
   }
 }
+
+/**
+ * Capture a region of the screen using the Screen Capture API.
+ * Shows the browser tab picker, then crops to the given element's bounding rect.
+ * Returns null if the user cancels or capture fails.
+ */
+export async function captureScreenCrop(
+  targetEl: HTMLElement,
+): Promise<Blob | null> {
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: "browser" } as MediaTrackConstraints,
+      audio: false,
+    });
+    const track = stream.getVideoTracks()[0];
+
+    // Capture a frame from the stream using a video element
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.muted = true;
+    await video.play();
+    // Wait a frame for the video to render
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    track.stop();
+
+    const rect = targetEl.getBoundingClientRect();
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(rect.width);
+    canvas.height = Math.round(rect.height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { video.srcObject = null; return null; }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    video.srcObject = null;
+
+    return await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.85);
+    });
+  } catch {
+    return null;
+  }
+}
