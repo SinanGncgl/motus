@@ -1,11 +1,9 @@
+import type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard } from "@/types";
+export type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard };
+
 const BASE = (import.meta.env.VITE_LOCAL_API_URL as string | undefined) ?? "";
 const SESSION_KEY = "motus.local.session";
-
-export interface LocalUser { id: string; name?: string; email?: string; image?: string; isAnonymous?: boolean }
-export interface LocalLine { index: number; start?: number; end?: number; text: string }
-export interface LocalSubtitle { _id: string; id?: string; title: string; sourceType: "srt" | "plain"; videoId?: string; fileId?: string; fileName?: string; fileUrl?: string; language?: string; lines: LocalLine[]; updatedAt: number; lastPosition?: number; collection?: string }
-export interface LocalWord { _id: string; id?: string; word: string; display: string; definition: string; example: string; sourceTitle?: string; language?: string; translation?: string; screenshotUrl?: string; cardBox: number; cardDueAt: number | null }
-export interface LocalCard { id: string; _id?: string; front: string; back: string; box: number; dueAt: number; screenshotUrl?: string; leechCount?: number; cardType?: "word" | "sentence"; savedWordId?: string; language?: string; easeFactor?: number }
+const dictionaryCache = new Map<string, { definition: string; example: string } | null>();
 
 function headers(extra: HeadersInit = {}) { const token = localStorage.getItem(SESSION_KEY); return { "Content-Type": "application/json", ...(token ? { "X-Local-Session": token } : {}), ...extra }; }
 async function request<T>(path: string, options: RequestInit = {}) { const response = await fetch(`${BASE}${path}`, { ...options, headers: headers(options.headers) }); if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || `Request failed (${response.status})`); } return response.json() as Promise<T>; }
@@ -32,7 +30,17 @@ export const localApi = {
   },
   cards: { due: (newCardsLimit?: number) => request<LocalCard[]>(`/api/cards/due${newCardsLimit != null ? `?newCardsLimit=${newCardsLimit}` : ""}`), dueCount: () => request<number>("/api/cards/due-count"), nextDue: () => request<{ nextDue: number | null }>("/api/cards/next-due"), rate: (cardId: string, rating: string) => request<void>("/api/cards/rate", { method: "POST", body: JSON.stringify({ cardId, rating }) }), suspend: (cardId: string) => request<void>("/api/cards/suspend", { method: "POST", body: JSON.stringify({ cardId }) }) },
   transcript: (videoId: string, lang?: string) => request<{ videoId: string; lines: LocalLine[] }>("/api/transcript", { method: "POST", body: JSON.stringify({ videoId, lang }) }),
-  dictionary: (word: string) => request<{ definition: string; example: string } | null>("/api/dictionary", { method: "POST", body: JSON.stringify({ word }) }),
+  dictionary: async (word: string) => {
+    const cached = dictionaryCache.get(word);
+    if (cached !== undefined) return cached;
+    if (dictionaryCache.size >= 500) {
+      const oldest = dictionaryCache.keys().next().value;
+      if (oldest !== undefined) dictionaryCache.delete(oldest);
+    }
+    const result = await request<{ definition: string; example: string } | null>("/api/dictionary", { method: "POST", body: JSON.stringify({ word }) });
+    dictionaryCache.set(word, result);
+    return result;
+  },
   upload: async (file: File) => { const response = await fetch(`${BASE}/api/uploads`, { method: "POST", headers: headers({ "Content-Type": file.type || "application/octet-stream", "X-File-Name": file.name }), body: file }); if (!response.ok) throw new Error("UPLOAD_FAILED"); return response.json() as Promise<{ storageId: string; fileName: string }>; },
   grab: (url: string) => request<{ storageId: string; fileName: string; fileUrl: string }>("/api/grab", { method: "POST", body: JSON.stringify({ url }) }),
   transcribeFile: (storageId: string, language?: string, model?: string) => request<{ lines: LocalLine[]; language: string }>("/api/transcribe-file", { method: "POST", body: JSON.stringify({ storageId, language, model }) }),

@@ -68,7 +68,7 @@ export async function captureScreenCrop(
     await video.play();
     // Wait a frame for the video to render
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    track.stop();
+    track?.stop();
 
     const rect = targetEl.getBoundingClientRect();
     const canvas = document.createElement("canvas");

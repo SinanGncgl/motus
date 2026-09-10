@@ -25,6 +25,7 @@ export interface SaveWordInput {
 export async function saveWord(input: SaveWordInput): Promise<{
   skipped: boolean;
   saved: boolean;
+  wordId?: string;
 }> {
   const common = isCommonWord(input.display);
   if (common && !settings.get().includeCommonWords) {
@@ -51,7 +52,7 @@ export async function saveWord(input: SaveWordInput): Promise<{
     }
     // Notify all components that a word was saved (cross-page refresh)
     window.dispatchEvent(new CustomEvent("motus:word-saved"));
-    return { skipped: false, saved: true };
+    return { skipped: false, saved: true, wordId: result.wordId };
   } catch {
     toast.error("Could not save the word.");
     return { skipped: false, saved: false };
@@ -123,7 +124,7 @@ function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    [a[i]!, a[j]!] = [a[j]!, a[i]!];
   }
   return a;
 }

@@ -1,12 +1,12 @@
 import { FilePlayer } from "@/components/app/FilePlayer";
 import { SpeakerButton } from "@/components/app/SpeakerButton";
+import { TranscriptPanel } from "@/components/app/TranscriptPanel";
+import { VideoControls } from "@/components/app/VideoControls";
 import {
   TranscribeFile,
   type TranscribedFile,
 } from "@/components/app/TranscribeFile";
-import { TranscriptLine } from "@/components/app/TranscriptLine";
 import { WordTooltip } from "@/components/app/WordTooltip";
-import { saveWord } from "@/lib/study";
 import { translateLine } from "@/lib/translate";
 import { Languages } from "lucide-react";
 import { WordDialog, type WordSelection } from "@/components/app/WordDialog";
@@ -29,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -45,7 +46,7 @@ import {
   type TranscribeModel,
   type TranscribeProgress,
 } from "@/lib/transcribe";
-import { LANGUAGES, languageLabel, speak } from "@/lib/tts";
+import { LANGUAGES, languageLabel } from "@/lib/tts";
 import { useSavedWords } from "@/hooks/use-saved-words";
 import { cn } from "@/lib/utils";
 import { captureFrame, captureScreenCrop, type PlayerHandle } from "@/lib/player";
@@ -54,7 +55,6 @@ import {
   detectLocalGrabber,
   extractYouTubeId,
   grabErrorMessage,
-  grabYouTubeAudio,
   grabYouTubeAudioStream,
   type GrabHealth,
   ytDlpAudioCommand,
@@ -62,26 +62,13 @@ import {
 import {
   ArrowLeft,
   BookMarked,
-  Bookmark,
-  Captions,
-  CaptionsOff,
-  ChevronDown,
-  ChevronsLeft,
   Clapperboard,
   Copy,
   Download,
-  Focus,
-  Gauge,
   HelpCircle,
   Link2,
   Loader2,
-  Maximize2,
   Play,
-  Repeat,
-  RotateCcw,
-  SkipBack,
-  SkipForward,
-  Trash2,
   Volume2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -96,15 +83,6 @@ const GRAB_STAGE_LABELS: Record<TranscribeProgress["stage"], string> = {
 };
 
 type LearnMode = "watch" | "learn" | "listen" | "practice";
-
-const MODES: { id: LearnMode; label: string; hint: string }[] = [
-  { id: "watch", label: "Watch", hint: "Video only — minimal UI" },
-  { id: "learn", label: "Learn", hint: "Transcript + translation + vocabulary" },
-  { id: "listen", label: "Listen", hint: "German only — train your ear" },
-  { id: "practice", label: "Practice", hint: "Hide words, test recall" },
-];
-
-const SPEEDS = [0.75, 1, 1.25] as const;
 
 const SHORTCUTS: [string, string][] = [
   ["Space / K", "Play / pause"],
@@ -123,6 +101,22 @@ const SHORTCUTS: [string, string][] = [
   ["?", "Toggle this help"],
   ["Esc", "Close popovers"],
 ];
+
+function TranscriptSkeleton({ lines = 15 }: { lines?: number }) {
+  return (
+    <div className="space-y-1 rounded-2xl border bg-card p-3 shadow-sm">
+      {Array.from({ length: lines }).map((_, i) => (
+        <div key={i} className="flex items-start gap-2 border-l-2 border-l-transparent pl-3 pr-2 py-2.5">
+          <Skeleton className="h-3 w-10 shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-full" style={{ width: `${60 + Math.random() * 30}%` }} />
+            <Skeleton className="h-3 w-3/4" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Watch() {
   const { subtitleId } = useParams<{ subtitleId: string }>();
@@ -223,6 +217,8 @@ function WatchContent({ id }: { id: string }) {
     return map;
   }, [savedWords]);
 
+  const savedWordsSet = useMemo(() => new Set(savedByWord.keys()), [savedByWord]);
+
   const hasTimestamps = (subtitle?.lines ?? []).some(
     (l) => l.start !== undefined,
   );
@@ -234,11 +230,11 @@ function WatchContent({ id }: { id: string }) {
     const lines = subtitle?.lines ?? [];
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (line.start !== undefined && time >= line.start) {
+      if (line && line.start !== undefined && time >= line.start) {
         if (line.end === undefined || time < line.end) return i;
       }
     }
-    if (lines.length > 0 && time < (lines[0].start ?? 0)) return 0;
+    if (lines.length > 0 && time < (lines[0]?.start ?? 0)) return 0;
     return null;
   }, [time, subtitle, hasTimestamps]);
 
@@ -289,6 +285,9 @@ function WatchContent({ id }: { id: string }) {
       .then((r) => {
         if (r.ok && r.text) {
           setTranslations((prev) => ({ ...prev, [row]: r.text }) as Record<number, string>);
+        } else {
+          // Mark as failed so the UI can show a retry option
+          setTranslations((prev) => ({ ...prev, [row]: "__failed__" }) as Record<number, string>);
         }
       })
       .finally(() =>
@@ -303,7 +302,10 @@ function WatchContent({ id }: { id: string }) {
   // Auto-translate the active line so the captions overlay + transcript stay useful.
   useEffect(() => {
     if (activeRow === null) return;
-    translateRow(activeRow);
+    const timer = setTimeout(() => {
+      translateRow(activeRow);
+    }, 300);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRow, subtitle?.language, translateTarget]);
 
@@ -410,7 +412,7 @@ function WatchContent({ id }: { id: string }) {
     if (!screenshot && subtitle.videoId && videoContainerRef.current) {
       screenshot = await captureScreenCrop(videoContainerRef.current);
     }
-    void save({
+    await save({
       word: tokenWord,
       display: raw,
       example: lineText,
@@ -418,7 +420,18 @@ function WatchContent({ id }: { id: string }) {
       language: subtitle.language,
       screenshot: screenshot ?? undefined,
     });
-    toast.success(`Saved "${raw}"`);
+    toast.success(`Saved "${raw}"`, {
+      action: {
+        label: "Undo",
+        onClick: async () => {
+          const existingEntry = existing(tokenWord);
+          if (existingEntry?._id) {
+            await remove(existingEntry._id);
+            toast.info(`Removed "${raw}"`);
+          }
+        },
+      },
+    });
   };
 
   const seekToLine = (row: number) => {
@@ -516,7 +529,7 @@ function WatchContent({ id }: { id: string }) {
 
   const cycleMode = () => {
     const order: LearnMode[] = ["watch", "learn", "listen", "practice"];
-    const next = order[(order.indexOf(mode) + 1) % order.length];
+    const next = order[(order.indexOf(mode) + 1) % order.length]!;
     setMode(next);
   };
 
@@ -809,9 +822,7 @@ function WatchContent({ id }: { id: string }) {
   };
 
   // ---- Learning stats ----
-  const wordsSavedHere = savedWords.filter(
-    (w) => w.sourceTitle === subtitle?.title,
-  ).length;
+  const wordsSavedHere = useMemo(() => savedWords.filter((w) => w.sourceTitle === subtitle?.title).length, [savedWords, subtitle?.title]);
   const totalUniqueWords = useMemo(() => {
     const set = new Set<string>();
     for (const line of subtitle?.lines ?? []) {
@@ -822,7 +833,10 @@ function WatchContent({ id }: { id: string }) {
     return set.size;
   }, [subtitle]);
 
-  const videoElapsed = duration > 0 ? time / duration : 0;
+  const activeLineTokens = useMemo(() => {
+    if (!activeLine) return [];
+    return tokenize(activeLine.text);
+  }, [activeLine?.text]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -870,9 +884,7 @@ function WatchContent({ id }: { id: string }) {
       )}
 
       {subtitle === undefined ? (
-        <div className="flex h-[50vh] items-center justify-center">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <TranscriptSkeleton />
       ) : subtitle === null ? (
         <Empty className="min-h-[400px] rounded-2xl border bg-card/40">
           <EmptyHeader>
@@ -935,7 +947,7 @@ function WatchContent({ id }: { id: string }) {
                       <div className="pointer-events-auto max-w-[92%] rounded-xl bg-black/70 px-4 py-2.5 shadow-lg backdrop-blur-sm">
                         <div className="flex items-start gap-2">
                           <p className="text-lg font-medium leading-7 text-white">
-                            {tokenize(activeLine.text).map((token, i) =>
+                            {activeLineTokens.map((token, i) =>
                               token.word ? (
                                 <WordTooltip
                                   key={i}
@@ -1023,278 +1035,47 @@ function WatchContent({ id }: { id: string }) {
                   )}
                 </div>
 
-                {/* Learning controls */}
-                <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 shadow-sm">
-                  {/* Row 1: transport + progress */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="cursor-pointer"
-                      onClick={goToPrevLine}
-                      disabled={!hasTimestamps}
-                      aria-label="Previous sentence"
-                    >
-                      <SkipBack className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="cursor-pointer"
-                      onClick={replayLine}
-                      disabled={!hasTimestamps || !activeLine}
-                      aria-label="Replay current sentence"
-                    >
-                      <RotateCcw className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="cursor-pointer"
-                      onClick={seekToCurrentStart}
-                      disabled={!hasTimestamps}
-                      aria-label="Start of current sentence"
-                      title="Start of sentence (Home)"
-                    >
-                      <ChevronsLeft className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="cursor-pointer"
-                      onClick={goToNextLine}
-                      disabled={!hasTimestamps}
-                      aria-label="Next sentence"
-                    >
-                      <SkipForward className="size-4" />
-                    </Button>
-
-                    {/* Progress: time / duration + bar */}
-                    <div className="flex min-w-[160px] flex-1 items-center gap-2 px-1">
-                      <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                        {formatClock(time)}
-                        {duration > 0 && (
-                          <span className="text-muted-foreground/60">
-                            {" "}
-                            / {formatClock(duration)}
-                          </span>
-                        )}
-                      </span>
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-primary transition-[width] duration-200"
-                          style={{ width: `${Math.round(videoElapsed * 100)}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {loopA !== null && loopB !== null && (
-                      <Badge variant="secondary" className="gap-1">
-                        <Repeat className="size-3" /> A-B
-                      </Badge>
-                    )}
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="cursor-pointer"
-                      onClick={() => setHelpOpen(true)}
-                      aria-label="Keyboard shortcuts"
-                    >
-                      <HelpCircle className="size-4" />
-                    </Button>
-                  </div>
-
-                  {/* Row 2: mode selector + speed + toggles */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1 rounded-lg border bg-muted/50 p-0.5">
-                      {MODES.map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          title={m.hint}
-                          onClick={() => setMode(m.id)}
-                          className={cn(
-                            "cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                            mode === m.id
-                              ? "bg-card text-foreground shadow-sm"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-1 rounded-lg border bg-muted/50 p-0.5">
-                      {SPEEDS.map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setPlaybackRate(r)}
-                          className={cn(
-                            "flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
-                            playbackRate === r
-                              ? "bg-card text-foreground shadow-sm"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          <Gauge className="size-3" />
-                          {r}×
-                        </button>
-                      ))}
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant={showCaptions ? "secondary" : "outline"}
-                      size="sm"
-                      className="cursor-pointer gap-1.5"
-                      onClick={() => setShowCaptions((v) => !v)}
-                      aria-pressed={showCaptions}
-                    >
-                      {showCaptions ? (
-                        <Captions className="size-4" />
-                      ) : (
-                        <CaptionsOff className="size-4" />
-                      )}
-                      {showCaptions ? "CC" : "CC off"}
-                    </Button>
-
-                    <Select
-                      value={translateTarget}
-                      onValueChange={(v) => {
-                        setTranslateTarget(v);
-                        setTranslations({});
-                      }}
-                    >
-                      <SelectTrigger
-                        className={cn(
-                          "h-8 w-auto gap-1.5 cursor-pointer",
-                          showTranslation
-                            ? "border-primary bg-primary/10"
-                            : "",
-                        )}
-                        aria-label="Translation target language"
-                      >
-                        <Languages className="size-4" />
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {LANGUAGES.map((l) => (
-                          <SelectItem key={l.code} value={l.code}>
-                            {l.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <Button
-                      type="button"
-                      variant={showTranslation ? "secondary" : "outline"}
-                      size="sm"
-                      className="cursor-pointer gap-1.5"
-                      onClick={() => setShowTranslation((v) => !v)}
-                      aria-pressed={showTranslation}
-                    >
-                      {showTranslation ? "Hide" : "Show"} T
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="cursor-pointer gap-1.5"
-                      onClick={() => void copyCurrentSentence()}
-                      aria-label="Copy sentence + translation"
-                      title="Copy sentence + translation (X)"
-                    >
-                      <Copy className="size-4" />Copy
-                    </Button>
-
-                    {hasTimestamps && (
-                      <Button
-                        type="button"
-                        variant={
-                          loopA !== null && loopB !== null
-                            ? "secondary"
-                            : "outline"
-                        }
-                        size="sm"
-                        className="cursor-pointer gap-1.5"
-                        onClick={() => {
-                          if (loopA !== null && loopB !== null) {
-                            setLoopA(null);
-                            setLoopB(null);
-                          } else if (loopA === null) {
-                            setLoopA(playerRef.current?.getCurrentTime() ?? 0);
-                            toast.success("Loop start set — press again for end");
-                          } else {
-                            setLoopB(playerRef.current?.getCurrentTime() ?? 0);
-                          }
-                        }}
-                        title="Set A-B loop on the current sentence"
-                      >
-                        <Repeat className="size-4" /> Loop
-                      </Button>
-                    )}
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="cursor-pointer gap-1.5"
-                      onClick={() => setFocusMode((v) => !v)}
-                    >
-                      <Focus className="size-4" />
-                      {focusMode ? "Exit" : "Focus"}
-                    </Button>
-                  </div>
-
-                  {/* PRACTICE options */}
-                  {mode === "practice" && (
-                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground/80">
-                        Practice:
-                      </span>
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={practiceHide}
-                          onChange={(e) => {
-                            setPracticeHide(e.target.checked);
-                            setRevealAll(false);
-                            setRevealedWords(new Set());
-                          }}
-                          className="accent-primary"
-                        />
-                        Hide words
-                      </label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 cursor-pointer gap-1 px-2 text-[11px]"
-                        onClick={() => {
-                          setRevealAll(true);
-                          const all = new Set<string>();
-                          for (const l of subtitle.lines)
-                            for (const t of tokenize(l.text))
-                              if (t.word) all.add(t.word);
-                          setRevealedWords(all);
-                        }}
-                      >
-                        <Maximize2 className="size-3" /> Reveal all
-                      </Button>
-                      <span>Tap a hidden word to reveal it.</span>
-                    </div>
-                  )}
-                </div>
+                <VideoControls
+                  hasTimestamps={hasTimestamps}
+                  time={time}
+                  duration={duration}
+                  playing={playing}
+                  mode={mode}
+                  playbackRate={playbackRate}
+                  showCaptions={showCaptions}
+                  showTranslation={showTranslation}
+                  translateTarget={translateTarget}
+                  loopA={loopA}
+                  loopB={loopB}
+                  focusMode={focusMode}
+                  practiceHide={practiceHide}
+                  onPrevLine={goToPrevLine}
+                  onNextLine={goToNextLine}
+                  onReplay={replayLine}
+                  onSeekToStart={seekToCurrentStart}
+                  onSetPlaybackRate={setPlaybackRate}
+                  onSetMode={setMode}
+                  onToggleCaptions={() => setShowCaptions((v) => !v)}
+                  onToggleTranslation={() => setShowTranslation((v) => !v)}
+                  onSetTranslateTarget={(v) => {
+                    setTranslateTarget(v);
+                    setTranslations({});
+                  }}
+                  onCopy={() => void copyCurrentSentence()}
+                  onSetLoopA={setLoopA}
+                  onSetLoopB={setLoopB}
+                  onSetFocusMode={(v) => setFocusMode(v)}
+                  onSetHelpOpen={setHelpOpen}
+                  onSetPracticeHide={setPracticeHide}
+                  onRevealAll={() => {
+                    setRevealAll(true);
+                    const all = new Set<string>();
+                    for (const l of subtitle!.lines)
+                      for (const t of tokenize(l.text))
+                        if (t.word) all.add(t.word);
+                    setRevealedWords(all);
+                  }}
+                />
               </>
             ) : (
               /* No video yet */
@@ -1543,185 +1324,54 @@ function WatchContent({ id }: { id: string }) {
 
           {/* TRANSCRIPT + VOCABULARY */}
           {mode !== "watch" && (
-            <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
-              {/* Transcript */}
-              <div className="min-w-0">
-                <div className="flex items-center justify-between px-1 pb-2">
-                  <button
-                    type="button"
-                    onClick={() => setTranscriptOpen((o) => !o)}
-                    className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    <ChevronDown
-                      className={cn(
-                        "size-4 transition-transform",
-                        !transcriptOpen && "-rotate-90",
-                      )}
-                    />
-                    Transcript
-                  </button>
-                  <p className="text-xs text-muted-foreground">
-                    {mode === "listen"
-                      ? "German only — listen first"
-                      : mode === "practice"
-                        ? "Hide & reveal to test yourself"
-                        : "Tap a line to jump · tap a word to save"}
-                  </p>
-                </div>
-                {transcriptOpen && (
-                  <div
-                    ref={transcriptRef}
-                    className={cn(
-                      "relative space-y-1 overflow-y-auto rounded-2xl border bg-card p-3 shadow-sm",
-                      focusMode ? "max-h-[32vh]" : "max-h-[52vh]",
-                    )}
-                  >
-                    {subtitle.lines.map((line, i) => {
-                      const showTranslationForLine =
-                        showTranslation &&
-                        mode !== "listen" &&
-                        (translations[i] !== undefined || translatingRows.has(i));
-                      const hidden = new Set<string>();
-                      if (mode === "practice" && practiceHide && !revealAll) {
-                        for (const t of tokenize(line.text))
-                          if (t.word && !revealedWords.has(t.word))
-                            hidden.add(t.word);
-                      }
-                      return (
-                        <TranscriptLine
-                          key={`${line.index}-${i}`}
-                          text={line.text}
-                          rowId={i}
-                          time={
-                            line.start !== undefined
-                              ? formatClock(line.start)
-                              : undefined
-                          }
-                          lang={subtitle.language}
-                          isActive={activeRow === i}
-                          progress={activeRow === i ? activeProgress : undefined}
-                          translation={
-                            mode === "listen"
-                              ? null
-                              : translations[i] ?? null
-                          }
-                          showTranslation={showTranslationForLine}
-                          savedWords={new Set(savedByWord.keys())}
-                          hiddenWords={hidden}
-                          onWordClick={openWord}
-                          onWordSave={saveWordFromToken}
-                          onLineClick={
-                            hasTimestamps && line.start !== undefined
-                              ? () => seekToLine(i)
-                              : undefined
-                          }
-                          onReplay={
-                            hasTimestamps && line.start !== undefined
-                              ? () => {
-                                  playerRef.current?.seekTo(line.start!, true);
-                                  playerRef.current?.playVideo();
-                                  setReviewedLines((prev) =>
-                                    new Set(prev).add(i),
-                                  );
-                                }
-                              : undefined
-                          }
-                          onToggleSave={() => {
-                            const already = savedWords.filter(
-                              (w) => w.sourceTitle === subtitle.title,
-                            );
-                            if (already.length > 0) {
-                              for (const w of already) void remove(w._id);
-                              toast.success("Unsaved this video's words");
-                            } else {
-                              saveCurrentSentence();
-                            }
-                          }}
-                          onCopy={() => {
-                            const translation = translations[i];
-                            const payload = translation
-                              ? `${line.text}\n${translation}`
-                              : line.text;
-                            void copyToClipboard(payload).then((ok) =>
-                              ok
-                                ? toast.success("Copied sentence + translation")
-                                : toast.error("Couldn't copy to clipboard"),
-                            );
-                          }}
-                          onTranslate={() => translateRow(i)}
-                          saved={false}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Vocabulary panel */}
-              <aside className="min-w-0">
-                <div className="sticky top-4 rounded-2xl border bg-card p-4 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                      <BookMarked className="size-4" /> Vocabulary
-                    </h2>
-                    <Badge variant="secondary">{savedWords.length}</Badge>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {wordsSavedHere} from this video
-                  </p>
-
-                  {savedWords.length === 0 ? (
-                    <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                      Tap any German word to save it. Saved words appear here and
-                      become practice cards automatically.
-                    </p>
-                  ) : (
-                    <ul className="mt-3 max-h-[44vh] space-y-1 overflow-y-auto pr-1">
-                      {savedWords.map((w) => (
-                        <li
-                          key={w._id}
-                          className="group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/50"
-                        >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openWord(
-                                w.word,
-                                w.display,
-                                w.example || "",
-                              )
-                            }
-                            className="min-w-0 flex-1 text-left"
-                          >
-                            <span className="block truncate text-sm font-medium text-foreground">
-                              {w.display}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {w.definition || "—"}
-                            </span>
-                          </button>
-                          <SpeakerButton
-                            text={w.display}
-                            lang={w.language}
-                            label={`Pronounce ${w.display}`}
-                            className="size-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void remove(w._id)}
-                            className="size-6 shrink-0 rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                            title="Remove from vocabulary"
-                            aria-label={`Remove ${w.display}`}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </aside>
-            </section>
+            <TranscriptPanel
+              subtitle={subtitle}
+              activeRow={activeRow}
+              activeProgress={activeProgress}
+              translations={translations}
+              translatingRows={translatingRows}
+              showTranslation={showTranslation}
+              mode={mode}
+              practiceHide={practiceHide}
+              revealAll={revealAll}
+              revealedWords={revealedWords}
+              savedWordsSet={savedWordsSet}
+              savedWords={savedWords}
+              wordsSavedHere={wordsSavedHere}
+              hasTimestamps={hasTimestamps}
+              transcriptOpen={transcriptOpen}
+              focusMode={focusMode}
+              onWordClick={openWord}
+              onWordSave={saveWordFromToken}
+              onLineSeek={seekToLine}
+              onReplayLine={(row, start) => {
+                playerRef.current?.seekTo(start, true);
+                playerRef.current?.playVideo();
+                setReviewedLines((prev) => new Set(prev).add(row));
+              }}
+              onToggleSaveLine={() => {
+                const already = savedWords.filter((w) => w.sourceTitle === subtitle.title);
+                if (already.length > 0) {
+                  for (const w of already) void remove(w._id);
+                  toast.success("Unsaved this video's words");
+                } else {
+                  saveCurrentSentence();
+                }
+              }}
+              onCopyLine={(row) => {
+                const line = subtitle.lines[row];
+                if (!line) return;
+                const translation = translations[row];
+                const payload = translation ? `${line.text}\n${translation}` : line.text;
+                void copyToClipboard(payload).then((ok) =>
+                  ok ? toast.success("Copied sentence + translation") : toast.error("Couldn't copy to clipboard"),
+                );
+              }}
+              onTranslateLine={translateRow}
+              onRemoveWord={(id) => void remove(id)}
+              onSetTranscriptOpen={setTranscriptOpen}
+              transcriptRef={transcriptRef}
+            />
           )}
         </div>
       )}
@@ -1758,10 +1408,4 @@ function WatchContent({ id }: { id: string }) {
       </Dialog>
     </div>
   );
-}
-
-function formatClock(total: number): string {
-  const m = Math.floor(total / 60);
-  const s = Math.floor(total % 60);
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }

@@ -39,7 +39,7 @@ function persistCache(): void {
 function evictIfNeeded(cache: Record<string, CacheEntry>): void {
   const keys = Object.keys(cache);
   if (keys.length <= MAX_ENTRIES) return;
-  const sorted = keys.sort((a, b) => cache[a].ts - cache[b].ts);
+  const sorted = keys.sort((a, b) => cache[a]!.ts - cache[b]!.ts);
   for (const k of sorted.slice(0, keys.length - MAX_ENTRIES)) {
     delete cache[k];
   }

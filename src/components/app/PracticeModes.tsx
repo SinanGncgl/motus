@@ -10,7 +10,7 @@ import {
   type DictationItem,
 } from "@/lib/study";
 import { speak } from "@/lib/tts";
-import { Check, Loader2, RotateCcw, Volume2, X } from "lucide-react";
+import { Check, RotateCcw, Volume2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 

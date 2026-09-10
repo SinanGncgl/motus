@@ -125,7 +125,6 @@ export function WordDialog({
     if (existing) return;
 
     // Lookup definition (offline first, then online)
-    let cancelled = false;
     const offline = offlineLookup(selection.word);
     if (offline) {
       setDefinition(offline.definition);
@@ -158,7 +157,6 @@ export function WordDialog({
         }
       });
     return () => {
-      cancelled = true;
       cancelled2 = true;
     };
   }, [open, selection, existing, videoRef]);

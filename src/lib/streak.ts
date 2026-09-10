@@ -31,12 +31,6 @@ function write(d: StreakData) {
   }
 }
 
-function dayDiff(a: string, b: string): number {
-  const da = new Date(a + "T00:00:00Z").getTime();
-  const db = new Date(b + "T00:00:00Z").getTime();
-  return Math.round((db - da) / 86400000);
-}
-
 export const streak = {
   /** Record `n` reviewed cards for today (adds to existing count). */
   record(n: number) {

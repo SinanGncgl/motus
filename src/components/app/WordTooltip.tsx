@@ -1,8 +1,8 @@
 import { SpeakerButton } from "@/components/app/SpeakerButton";
 import { offlineLookup } from "@/lib/offline-dictionary";
 import { cn } from "@/lib/utils";
-import { Bookmark, BookmarkCheck, Plus, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { BookmarkCheck, Plus, X } from "lucide-react";
+import { useState, useMemo, type ReactNode } from "react";
 
 interface Props {
   word: string; // normalized word (lowercase)
@@ -23,9 +23,9 @@ interface Props {
  * "details" actions. Keeps learners in context — no page navigation.
  */
 export function WordTooltip({
-  word,
+  word: _word,
   display,
-  example,
+  example: _example,
   lang,
   saved,
   onSave,
@@ -35,7 +35,7 @@ export function WordTooltip({
   className,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const entry = offlineLookup(display);
+  const entry = useMemo(() => offlineLookup(display), [display]);
 
   return (
     <span

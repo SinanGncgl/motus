@@ -103,9 +103,9 @@ export default function Dashboard() {
     const dueByDay: number[] = new Array(14).fill(0);
     for (const w of list) {
       const box = Math.max(0, Math.min(4, w.cardBox));
-      byBox[box]++;
+      byBox[box] = (byBox[box] ?? 0) + 1;
       const d = daysUntil(w.cardDueAt);
-      if (d !== null && d >= 0 && d < 14) dueByDay[d]++;
+      if (d !== null && d >= 0 && d < 14) dueByDay[d] = (dueByDay[d] ?? 0) + 1;
     }
     return { total, byBox, dueByDay };
   }, [words]);

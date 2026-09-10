@@ -58,13 +58,34 @@ export function useSavedWords() {
   );
 
   const save = useCallback(
-    async (input: SaveInput) => {
-      const res = await saveWord(input);
-      if (res.saved) {
-        const fresh = await localApi.words.list();
-        setWords(fresh);
+    async (input: SaveInput): Promise<{ skipped: boolean; saved: boolean; wordId?: string }> => {
+      const optimisticWord: LocalWord = {
+        _id: `temp-${Date.now()}`,
+        word: input.word,
+        display: input.display,
+        definition: input.definition ?? "",
+        example: input.example ?? "",
+        sourceTitle: input.sourceTitle,
+        language: input.language,
+        screenshotUrl: undefined,
+        cardBox: 0,
+        cardDueAt: null,
+      };
+      setWords((prev) => [...prev, optimisticWord]);
+
+      try {
+        const res = await saveWord(input);
+        if (res.saved) {
+          const fresh = await localApi.words.list();
+          setWords(fresh);
+        } else if (res.skipped) {
+          setWords((prev) => prev.filter((w) => w._id !== optimisticWord._id));
+        }
+        return res;
+      } catch {
+        setWords((prev) => prev.filter((w) => w._id !== optimisticWord._id));
+        return { skipped: false, saved: false };
       }
-      return res;
     },
     [],
   );

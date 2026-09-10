@@ -166,26 +166,26 @@ export default function Settings() {
             <SelectContent>
               <SelectItem value="auto">Auto-detect</SelectItem>
               {LANGUAGES.map((l) => (
-                <SelectItem key={l.code} value={l.code.split("-")[0]}>
-                  {l.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            The language of the original captions. Set this to avoid
-            mis-detection (e.g. German auto-detected as Indonesian).
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 rounded-xl border bg-card/60 p-3">
-          <Label htmlFor="nativelang">Translate into</Label>
-          <Select value={nativeLang} onValueChange={setNativeLang}>
-            <SelectTrigger id="nativelang" className="w-full sm:w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LANGUAGES.map((l) => (
-                <SelectItem key={l.code} value={l.code.split("-")[0]}>
+                  <SelectItem key={l.code} value={l.code.split("-")[0] ?? l.code}>
+                    {l.label}
+                  </SelectItem>
+                ))}
+             </SelectContent>
+           </Select>
+           <p className="text-xs text-muted-foreground">
+             The language of the original captions. Set this to avoid
+             mis-detection (e.g. German auto-detected as Indonesian).
+           </p>
+         </div>
+         <div className="flex flex-col gap-2 rounded-xl border bg-card/60 p-3">
+           <Label htmlFor="nativelang">Translate into</Label>
+           <Select value={nativeLang} onValueChange={setNativeLang}>
+             <SelectTrigger id="nativelang" className="w-full sm:w-56">
+               <SelectValue />
+             </SelectTrigger>
+             <SelectContent>
+               {LANGUAGES.map((l) => (
+                 <SelectItem key={l.code} value={l.code.split("-")[0] ?? l.code}>
                   {l.label}
                 </SelectItem>
               ))}

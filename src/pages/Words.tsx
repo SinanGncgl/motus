@@ -41,7 +41,7 @@ import {
   Trash2,
   Volume2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { buildAnkiTsv, downloadFile } from "@/lib/subtitles";

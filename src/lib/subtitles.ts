@@ -92,8 +92,8 @@ export function parseSubtitleText(raw: string): {
       if (!lineText) continue;
       lines.push({
         index: Number(parts[0]),
-        start: parseTimestamp(timeMatch[1]),
-        end: parseTimestamp(timeMatch[2]),
+        start: parseTimestamp(timeMatch[1]!),
+        end: parseTimestamp(timeMatch[2]!),
         text: lineText,
       });
     }

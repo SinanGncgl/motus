@@ -1,7 +1,6 @@
-import { SpeakerButton } from "@/components/app/SpeakerButton";
-import { WordTooltip } from "@/components/app/WordTooltip";
 import { cn } from "@/lib/utils";
 import { tokenize } from "@/lib/subtitles";
+import React from "react";
 import { Bookmark, BookmarkCheck, Copy, Languages, RotateCcw } from "lucide-react";
 
 interface TranscriptLineProps {
@@ -40,11 +39,11 @@ interface TranscriptLineProps {
  * the English translation is visually secondary. The active line gets a
  * subtle background, a left accent bar, and stronger typography.
  */
-export function TranscriptLine({
+export const TranscriptLine = React.memo(function TranscriptLine({
   text,
   rowId,
   time,
-  lang,
+  lang: _lang,
   isActive = false,
   progress,
   translation,
@@ -52,7 +51,7 @@ export function TranscriptLine({
   savedWords,
   hiddenWords,
   onWordClick,
-  onWordSave,
+  onWordSave: _onWordSave,
   onLineClick,
   onReplay,
   onToggleSave,
@@ -202,7 +201,11 @@ export function TranscriptLine({
 
       {showTranslation && translation && (
         <p className="mt-1 text-[14px] leading-6 text-muted-foreground/80">
-          {translation}
+          {translation === "__failed__" ? (
+            <span className="italic text-muted-foreground/50">Translation unavailable</span>
+          ) : (
+            translation
+          )}
         </p>
       )}
 
@@ -216,4 +219,4 @@ export function TranscriptLine({
       )}
     </div>
   );
-}
+});

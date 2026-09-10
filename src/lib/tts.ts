@@ -41,7 +41,7 @@ function pickVoice(lang: string): SpeechSynthesisVoice | null {
   if (voices.length === 0) return null;
   const exact = voices.find((v) => v.lang.toLowerCase() === lang.toLowerCase());
   if (exact) return exact;
-  const primary = lang.split("-")[0].toLowerCase();
+  const primary = lang.split("-")[0]!.toLowerCase();
   const base = voices.find((v) => v.lang.toLowerCase().startsWith(primary));
   return base ?? null;
 }
