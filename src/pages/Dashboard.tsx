@@ -196,7 +196,7 @@ export default function Dashboard() {
                         backgroundColor:
                           n === 0
                             ? "var(--muted)"
-                            : `color-mix(in oklch, var(--primary) ${Math.round(intensity * 100)}%, transparent)`,
+                            : `rgba(0, 255, 136, ${intensity.toFixed(2)})`,
                         boxShadow: n === 0 ? "none" : "0 0 3px #00ff8840",
                       }}
                       title={`${n} reviewed`}
