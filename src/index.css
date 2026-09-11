@@ -167,6 +167,10 @@
   html {
     scroll-behavior: smooth;
   }
+  button, a, [role="button"], input[type="checkbox"], input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 /* === Cyberpunk Keyframes === */

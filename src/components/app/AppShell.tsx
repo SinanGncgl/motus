@@ -15,7 +15,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-background">
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-[#2a2a3a] bg-[#0a0a0f] px-4 py-6 lg:flex">
-        <NavLink to="/dashboard" className="flex items-center gap-2.5 px-2">
+        <NavLink to="/dashboard" aria-label="Motus Home" className="flex items-center gap-2.5 px-2">
           <span className="flex size-8 items-center justify-center rounded-lg bg-[#00ff88] text-[#0a0a0f] shadow-[0_0_5px_#00ff88,0_0_10px_#00ff8840]">
             <Quote className="size-4" />
           </span>
@@ -47,7 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Mobile header */}
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[#2a2a3a] bg-[#0a0a0f] px-4 backdrop-blur lg:hidden">
-        <NavLink to="/dashboard" className="flex items-center gap-2">
+        <NavLink to="/dashboard" aria-label="Motus Home" className="flex items-center gap-2">
           <span className="flex size-7 items-center justify-center rounded-md bg-[#00ff88] text-[#0a0a0f]">
             <Quote className="size-3.5" />
           </span>
