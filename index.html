@@ -7,6 +7,14 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Motus</title>
+  <script>
+    // SPA redirect for GitHub Pages
+    (function(l) {
+      if (l.search[1] === '/') {
+        window.location.replace(l.pathname + l.hash);
+      }
+    }(window.location))
+  </script>
 </head>
 
 
