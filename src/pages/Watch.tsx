@@ -946,7 +946,7 @@ function WatchContent({ id }: { id: string }) {
                     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center px-4">
                       <div className="pointer-events-auto max-w-[92%] rounded-xl bg-black/70 px-4 py-2.5 shadow-lg backdrop-blur-sm">
                         <div className="flex items-start gap-2">
-                          <p className="text-lg font-medium leading-7 text-white">
+                          <p className="font-mono text-lg leading-7 text-[#00ff88] shadow-[0_0_5px_#00ff8840]">
                             {activeLineTokens.map((token, i) =>
                               token.word ? (
                                 <WordTooltip
@@ -980,12 +980,12 @@ function WatchContent({ id }: { id: string }) {
                                       : ""
                                   }
                                 >
-                                  <span className="mx-[1px] text-white">
+                                  <span className="mx-[1px] text-[#00ff88]">
                                     {token.text}
                                   </span>
                                 </WordTooltip>
                               ) : (
-                                <span key={i} className="text-white">
+                                <span key={i} className="text-[#00ff88]">
                                   {token.text}
                                 </span>
                               ),
@@ -1018,7 +1018,7 @@ function WatchContent({ id }: { id: string }) {
                         </div>
                         {showTranslation &&
                           translations[activeRow ?? -1] && (
-                            <p className="mt-1.5 text-sm italic text-white/80">
+                            <p className="mt-1.5 font-mono text-sm italic text-[#ff00ff]">
                               {translations[activeRow ?? -1]}
                             </p>
                           )}
