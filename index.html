@@ -9,9 +9,10 @@
   <title>Motus</title>
   <script>
     // SPA redirect for GitHub Pages
+    // When 404.html redirects to /motus/?/words, this decodes it back to /motus/words
     (function(l) {
-      if (l.search[1] === '/') {
-        window.location.replace(l.pathname + l.hash);
+      if (l.search && l.search[1] === '/') {
+        window.location.replace('/motus/' + l.search.slice(2) + l.hash);
       }
     }(window.location))
   </script>
