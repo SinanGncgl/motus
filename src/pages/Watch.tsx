@@ -995,7 +995,7 @@ function WatchContent({ id }: { id: string }) {
                             text={activeLine.text}
                             lang={subtitle.language}
                             label="Pronounce current line"
-                            className="shrink-0 text-white hover:bg-white/20 hover:text-white"
+                            className="shrink-0 text-[#00ff88] hover:bg-[#00ff88]/20 hover:text-[#00ff88]"
                           />
                           <button
                             type="button"
@@ -1003,14 +1003,14 @@ function WatchContent({ id }: { id: string }) {
                             className={cn(
                               "flex size-8 shrink-0 items-center justify-center rounded-md",
                               showTranslation
-                                ? "bg-white/25 text-white"
-                                : "text-white hover:bg-white/20",
+                                ? "bg-[#00ff88]/25 text-[#00ff88]"
+                                : "text-[#00ff88] hover:bg-[#00ff88]/20",
                             )}
                             aria-label="Toggle translation"
                             aria-pressed={showTranslation}
                           >
                             {translatingRows.has(activeRow ?? -1) ? (
-                              <Loader2 className="size-4 animate-spin" />
+                              <Loader2 className="size-4 animate-spin text-[#00ff88]" />
                             ) : (
                               <Languages className="size-4" />
                             )}
@@ -1023,9 +1023,9 @@ function WatchContent({ id }: { id: string }) {
                             </p>
                           )}
                         {activeProgress !== undefined && (
-                          <div className="mt-1.5 h-0.5 w-full overflow-hidden rounded-full bg-white/20">
+                          <div className="mt-1.5 h-0.5 w-full overflow-hidden rounded-full bg-[#00ff88]/20">
                             <div
-                              className="h-full rounded-full bg-teal-400"
+                              className="h-full rounded-full bg-[#00ff88] shadow-[0_0_5px_#00ff8840]"
                               style={{ width: `${Math.round(activeProgress * 100)}%` }}
                             />
                           </div>
