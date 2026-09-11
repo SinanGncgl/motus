@@ -37,6 +37,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/hooks/use-auth";
+import { cyberChamfer, neonGlow } from "@/lib/cyberpunk";
 import { toast } from "sonner";
 
 const BOX_LABELS = ["New", "Learning", "Young", "Mature", "Mastered"];
@@ -161,7 +162,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-[#00ff88] shadow-[0_0_5px_#00ff88,0_0_10px_#00ff8840] transition-all"
+                className={`h-full rounded-full bg-[#00ff88] ${neonGlow("green", "md")} transition-all`}
                 style={{ width: `${goalPct}%` }}
               />
             </div>
@@ -212,36 +213,36 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <div className="cyber-chamfer rounded-2xl border bg-card p-5 shadow-sm">
+        <div className={`${cyberChamfer()} rounded-2xl border bg-card p-5 shadow-sm`}>
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] shadow-[0_0_5px_#00ff8840]">
+            <div className={`rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] ${neonGlow("green", "md")}`}>
               <Library className="h-5 w-5" />
             </div>
           </div>
           <p className="mt-4 font-heading text-3xl font-semibold">{words?.length ?? 0}</p>
           <p className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">Words saved</p>
         </div>
-        <div className="cyber-chamfer rounded-2xl border bg-card p-5 shadow-sm">
+        <div className={`${cyberChamfer()} rounded-2xl border bg-card p-5 shadow-sm`}>
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] shadow-[0_0_5px_#00ff8840]">
+            <div className={`rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] ${neonGlow("green", "md")}`}>
               <GraduationCap className="h-5 w-5" />
             </div>
           </div>
           <p className="mt-4 font-heading text-3xl font-semibold">{dueCount ?? 0}</p>
           <p className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">Cards due</p>
         </div>
-        <div className="cyber-chamfer rounded-2xl border bg-card p-5 shadow-sm">
+        <div className={`${cyberChamfer()} rounded-2xl border bg-card p-5 shadow-sm`}>
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] shadow-[0_0_5px_#00ff8840]">
+            <div className={`rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] ${neonGlow("green", "md")}`}>
               <Sparkles className="h-5 w-5" />
             </div>
           </div>
           <p className="mt-4 font-heading text-3xl font-semibold">{mastered}</p>
           <p className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">Mastered</p>
         </div>
-        <div className="cyber-chamfer rounded-2xl border bg-card p-5 shadow-sm">
+        <div className={`${cyberChamfer()} rounded-2xl border bg-card p-5 shadow-sm`}>
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] shadow-[0_0_5px_#00ff8840]">
+            <div className={`rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] ${neonGlow("green", "md")}`}>
               <Captions className="h-5 w-5" />
             </div>
           </div>
@@ -310,7 +311,7 @@ export default function Dashboard() {
                 key={s._id}
                 type="button"
                 onClick={() => navigate(`/watch/${s._id}`)}
-                className="group cyber-chamfer flex items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:border-[#00ff88] hover:shadow-[0_0_5px_#00ff88,0_0_10px_#00ff8840]"
+                className={`group ${cyberChamfer()} flex items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:border-[#00ff88] hover:shadow-[0_0_5px_#00ff88,0_0_10px_#00ff8840]`}
               >
                 {s.videoId ? (
                   <img src={`https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg`} alt="" className="size-16 shrink-0 rounded-lg object-cover" />
@@ -346,8 +347,8 @@ export default function Dashboard() {
       {srsStats.total > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <BarChart3 className="size-4 text-primary" /> Card maturity
+            <CardTitle className="flex items-center gap-2 font-heading text-base uppercase tracking-widest text-[#00ff88] cyber-chromatic">
+              <BarChart3 className="size-4 text-[#00ff88]" /> Card maturity
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -377,8 +378,8 @@ export default function Dashboard() {
       {srsStats.total > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarDays className="size-4 text-primary" /> Reviews due (next 14 days)
+            <CardTitle className="flex items-center gap-2 font-heading text-base uppercase tracking-widest text-[#00ff88] cyber-chromatic">
+              <CalendarDays className="size-4 text-[#00ff88]" /> Reviews due (next 14 days)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -408,8 +409,8 @@ export default function Dashboard() {
       {recent.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Library className="size-4 text-primary" /> Recent words
+            <CardTitle className="flex items-center gap-2 font-heading text-base uppercase tracking-widest text-[#00ff88] cyber-chromatic">
+              <Library className="size-4 text-[#00ff88]" /> Recent words
             </CardTitle>
           </CardHeader>
           <CardContent>
