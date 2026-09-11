@@ -14,6 +14,7 @@ import { LANGUAGES } from "@/lib/tts";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { chromaticAberration } from "@/lib/cyberpunk";
 import { ArrowLeft, Settings as SettingsIcon } from "lucide-react";
 
 export default function Settings() {
@@ -69,7 +70,7 @@ export default function Settings() {
       </header>
 
       <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm">
-        <h2 className="flex items-center gap-2 text-base font-semibold">
+        <h2 className={`flex items-center gap-2 text-base font-semibold font-heading uppercase tracking-widest text-[#00ff88] ${chromaticAberration()}`}>
           <SettingsIcon className="size-4 text-primary" /> Vocabulary
         </h2>
         <label className="flex items-start justify-between gap-4 rounded-xl border bg-card/60 p-3">
@@ -91,7 +92,7 @@ export default function Settings() {
       </div>
 
       <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm">
-        <h2 className="text-base font-semibold">Study goals</h2>
+        <h2 className={`text-base font-semibold font-heading uppercase tracking-widest text-[#00ff88] ${chromaticAberration()}`}>Study goals</h2>
         <div className="flex flex-col gap-2">
           <Label htmlFor="goal">Daily review goal (cards/day)</Label>
           <Input
@@ -122,7 +123,7 @@ export default function Settings() {
       </div>
 
       <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm">
-        <h2 className="text-base font-semibold">Watch &amp; listen</h2>
+        <h2 className={`text-base font-semibold font-heading uppercase tracking-widest text-[#00ff88] ${chromaticAberration()}`}>Watch &amp; listen</h2>
         <label className="flex items-start justify-between gap-4 rounded-xl border bg-card/60 p-3">
           <span>
             <span className="text-sm font-medium">
@@ -199,7 +200,7 @@ export default function Settings() {
       </div>
 
       <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm">
-        <h2 className="text-base font-semibold">Translation</h2>
+        <h2 className={`text-base font-semibold font-heading uppercase tracking-widest text-[#00ff88] ${chromaticAberration()}`}>Translation</h2>
         <div className="flex flex-col gap-2 rounded-xl border bg-card/60 p-3">
           <Label>Translation service</Label>
           <Select value={translationSvc} onValueChange={(v) => setTranslationSvc(v as "libretranslate" | "deepl")}>
@@ -220,7 +221,7 @@ export default function Settings() {
       </div>
 
       <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm">
-        <h2 className="text-base font-semibold">Online enhancements</h2>
+        <h2 className={`text-base font-semibold font-heading uppercase tracking-widest text-[#00ff88] ${chromaticAberration()}`}>Online enhancements</h2>
         <div className="flex flex-col gap-2">
           <Label htmlFor="tkey">
             Translation / dictionary API key (optional)
@@ -259,7 +260,7 @@ export default function Settings() {
       </div>
 
       <div className="flex justify-end">
-        <Button type="button" onClick={save} className="cursor-pointer gap-2">
+        <Button type="button" variant="glitch" onClick={save} className="cursor-pointer gap-2">
           Save settings
         </Button>
       </div>

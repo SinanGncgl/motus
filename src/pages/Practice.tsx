@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/empty";
 import { SpeakerButton } from "@/components/app/SpeakerButton";
 import { useDueCards, useLocalWords } from "@/hooks/use-local-data";
+import { cyberChamfer } from "@/lib/cyberpunk";
 import { session, streak } from "@/lib/streak";
 import { localApi, type LocalCard, type LocalWord } from "@/lib/local-api";
 import { ClozePractice, DictationPractice } from "@/components/app/PracticeModes";
@@ -282,19 +283,22 @@ export default function Practice() {
       <Progress value={(reviewedCount / Math.max(totalCount, 1)) * 100} />
 
       {(correctCount > 0 || incorrectCount > 0) && (
-        <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center gap-4 text-xs">
           <span className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-emerald-500" />
-            {correctCount} recalled
+            <span className="font-heading">{correctCount}</span>
+            <span className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">recalled</span>
           </span>
           <span className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-destructive" />
-            {incorrectCount} to revisit
+            <span className="font-heading">{incorrectCount}</span>
+            <span className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">to revisit</span>
           </span>
           {newCount > 0 && (
             <span className="flex items-center gap-1.5">
               <span className="size-2 rounded-full bg-sky-500" />
-              {newCount} new
+              <span className="font-heading">{newCount}</span>
+              <span className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">new</span>
             </span>
           )}
         </div>
@@ -316,7 +320,7 @@ export default function Practice() {
           >
             {/* Front */}
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-2xl border bg-card p-10 shadow-lg"
+              className={`absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-[#00ff88] bg-card p-10 shadow-lg ${cyberChamfer()}`}
               style={{ backfaceVisibility: "hidden" }}
             >
               {current.cardType === "sentence" ? (
@@ -356,7 +360,7 @@ export default function Practice() {
             </div>
             {/* Back */}
             <div
-              className="absolute inset-0 flex flex-col justify-center gap-5 rounded-2xl border bg-card p-10 shadow-lg"
+              className={`absolute inset-0 flex flex-col justify-center gap-5 rounded-2xl border-2 border-[#ff00ff] bg-card p-10 shadow-lg ${cyberChamfer()}`}
               style={{
                 backfaceVisibility: "hidden",
                 transform: "rotateY(180deg)",
@@ -427,7 +431,7 @@ export default function Practice() {
             variant="outline"
             disabled={isRating}
             onClick={() => void handleRate("again")}
-            className="cursor-pointer flex-col gap-1 py-3 text-destructive hover:text-destructive sm:flex-row"
+            className="cursor-pointer flex-col gap-1 py-3 border-[#ff3366] text-[#ff3366] hover:bg-[#ff3366] hover:text-white hover:shadow-[0_0_5px_#ff336640] sm:flex-row"
           >
             <RotateCcw className="size-4" />
             <span>
@@ -442,7 +446,7 @@ export default function Practice() {
             variant="outline"
             disabled={isRating}
             onClick={() => void handleRate("hard")}
-            className="cursor-pointer flex-col gap-1 py-3 sm:flex-row"
+            className="cursor-pointer flex-col gap-1 py-3 border-[#f59e0b] text-[#f59e0b] hover:bg-[#f59e0b] hover:text-[#0a0a0f] hover:shadow-[0_0_5px_#f59e0b40] sm:flex-row"
           >
             <span>
               Hard
@@ -455,7 +459,7 @@ export default function Practice() {
             type="button"
             disabled={isRating}
             onClick={() => void handleRate("good")}
-            className="cursor-pointer flex-col gap-1 py-3 sm:flex-row"
+            className="cursor-pointer flex-col gap-1 py-3 border-[#00ff88] text-[#00ff88] hover:bg-[#00ff88] hover:text-[#0a0a0f] hover:shadow-[0_0_5px_#00ff8840] sm:flex-row"
           >
             <Check className="size-4" />
             <span>
@@ -470,7 +474,7 @@ export default function Practice() {
             variant="outline"
             disabled={isRating}
             onClick={() => void handleRate("easy")}
-            className="cursor-pointer flex-col gap-1 py-3 sm:flex-row"
+            className="cursor-pointer flex-col gap-1 py-3 border-[#00d4ff] text-[#00d4ff] hover:bg-[#00d4ff] hover:text-[#0a0a0f] hover:shadow-[0_0_5px_#00d4ff40] sm:flex-row"
           >
             <TrendingUp className="size-4" />
             <span>

@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cyberChamfer } from "@/lib/cyberpunk";
 import { useLocalWords } from "@/hooks/use-local-data";
 import { saveWord } from "@/lib/study";
 import { localApi } from "@/lib/local-api";
@@ -281,7 +282,7 @@ export default function Words() {
           </div>
           <Button
             type="button"
-            variant="outline"
+            variant="glitch"
             onClick={handleExport}
             disabled={!words || words.length === 0}
             className="cursor-pointer gap-2"
@@ -386,7 +387,7 @@ export default function Words() {
             return (
               <div
                 key={word._id}
-                className="group flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
+                className={`group flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md ${cyberChamfer()} border border-[#00ff8830]`}
               >
                 <div className="flex items-start gap-3">
                   <button
@@ -411,7 +412,7 @@ export default function Words() {
                       </span>
                     )}
                     <div>
-                      <p className="text-base font-semibold tracking-tight">
+                      <p className="text-base font-semibold tracking-tight font-heading">
                         {word.display}
                       </p>
                       <div className="mt-0.5 flex items-center gap-2">
@@ -489,7 +490,7 @@ export default function Words() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <p className="text-sm leading-6 text-foreground/90">
+                  <p className="font-mono text-sm text-[#6b7280]">
                     {word.definition || (
                       <span className="italic text-muted-foreground">
                         No definition yet — edit to add one.
