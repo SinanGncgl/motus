@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { LANGUAGES } from "@/lib/tts";
 import { cn } from "@/lib/utils";
+import { cyberChamfer } from "@/lib/cyberpunk";
 import {
   Captions,
   CaptionsOff,
@@ -120,7 +121,7 @@ export function VideoControls({
           aria-label="Previous sentence"
           title="Previous sentence (←)"
         >
-          <SkipBack className="size-4" />
+          <SkipBack className="size-4 text-[#00ff88]" />
         </Button>
         <Button
           type="button"
@@ -132,7 +133,7 @@ export function VideoControls({
           aria-label="Replay current sentence"
           title="Replay sentence (R)"
         >
-          <RotateCcw className="size-4" />
+          <RotateCcw className="size-4 text-[#00ff88]" />
         </Button>
         <Button
           type="button"
@@ -144,7 +145,7 @@ export function VideoControls({
           aria-label="Start of current sentence"
           title="Start of sentence (Home)"
         >
-          <ChevronsLeft className="size-4" />
+          <ChevronsLeft className="size-4 text-[#00ff88]" />
         </Button>
         <Button
           type="button"
@@ -156,7 +157,7 @@ export function VideoControls({
           aria-label="Next sentence"
           title="Next sentence (→)"
         >
-          <SkipForward className="size-4" />
+          <SkipForward className="size-4 text-[#00ff88]" />
         </Button>
 
         {/* Progress: time / duration + bar */}
@@ -208,8 +209,9 @@ export function VideoControls({
               onClick={() => onSetMode(m.id)}
               className={cn(
                 "cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                cyberChamfer(true),
                 mode === m.id
-                  ? "bg-card text-foreground shadow-sm"
+                  ? "bg-card text-[#00ff88] shadow-[0_0_5px_#00ff8840]"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >

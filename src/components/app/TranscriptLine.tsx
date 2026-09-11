@@ -68,7 +68,7 @@ export const TranscriptLine = React.memo(function TranscriptLine({
         "group relative scroll-mt-4 border-l-2 pl-3 pr-2 py-2.5 transition-colors duration-200",
         onLineClick && "cursor-pointer",
         isActive
-          ? "border-l-primary bg-primary/[0.07]"
+          ? "border-l-[#00ff88] bg-primary/[0.07] text-[#00ff88] shadow-[0_0_5px_#00ff8840]"
           : "border-l-transparent hover:bg-accent/50",
       )}
     >
@@ -153,7 +153,7 @@ export const TranscriptLine = React.memo(function TranscriptLine({
 
       <p
         className={cn(
-          "mt-1 min-w-0 break-words text-[17px] leading-8 tracking-wide",
+          "mt-1 min-w-0 break-words font-mono text-[17px] leading-8 tracking-wide",
           isActive ? "font-medium text-foreground" : "text-foreground/85",
         )}
       >
@@ -200,7 +200,7 @@ export const TranscriptLine = React.memo(function TranscriptLine({
       </p>
 
       {showTranslation && translation && (
-        <p className="mt-1 text-[14px] leading-6 text-muted-foreground/80">
+        <p className="mt-1 text-[14px] leading-6 text-[#ff00ff]">
           {translation === "__failed__" ? (
             <span className="italic text-muted-foreground/50">Translation unavailable</span>
           ) : (

@@ -4,6 +4,7 @@ import { SpeakerButton } from "@/components/app/SpeakerButton";
 import { Badge } from "@/components/ui/badge";
 import { BookMarked, ChevronDown, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { cyberChamfer } from "@/lib/cyberpunk";
 import { tokenize } from "@/lib/subtitles";
 import type { LocalSubtitle, LocalWord } from "@/lib/local-api";
 
@@ -141,10 +142,12 @@ export function TranscriptPanel({
           <div
             ref={transcriptRef}
             className={cn(
-              "relative space-y-1 overflow-y-auto rounded-2xl border bg-card p-3 shadow-sm",
+              "relative space-y-1 overflow-y-auto rounded-2xl border bg-[#0a0a0f] p-3 shadow-sm",
               focusMode ? "max-h-[32vh]" : "max-h-[52vh]",
             )}
           >
+            <div className="absolute inset-0 pointer-events-none bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.15)_2px,rgba(0,0,0,0.15)_4px)]" />
+
             {subtitle.lines.map((line, i) => {
               const showTranslationForLine =
                 showTranslation &&
@@ -202,7 +205,7 @@ export function TranscriptPanel({
 
       {/* Vocabulary panel */}
       <aside className="min-w-0">
-        <div className="sticky top-4 rounded-2xl border bg-card p-4 shadow-sm">
+          <div className={cn("sticky top-4 rounded-2xl border border-[#00ff8830] bg-card p-4 shadow-sm", cyberChamfer())}>
           <button
             type="button"
             onClick={() => setVocabOpen((o) => !o)}
