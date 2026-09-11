@@ -123,17 +123,21 @@ export default function Dashboard() {
         <p className="text-sm font-medium text-muted-foreground">
           Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
         </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-          Your vocabulary studio
+        <h1
+          className="font-heading text-3xl font-bold uppercase tracking-widest text-[#00ff88] cyber-chromatic"
+          data-text="WELCOME BACK"
+        >
+          WELCOME BACK
+          <span className="cyber-cursor" />
         </h1>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+        <p className="mt-2 max-w-xl text-sm leading-6 text-[#6b7280] font-mono">
           Learn from subtitles, save words, and practice automatically generated
           cards — entirely on this computer.
         </p>
       </header>
 
       <div className="flex flex-wrap gap-3">
-        <Button type="button" className="cursor-pointer gap-2" onClick={() => setNewSubOpen(true)}>
+        <Button type="button" variant="glitch" className="cursor-pointer gap-2" onClick={() => setNewSubOpen(true)}>
           <Plus className="size-4" /> New subtitle
         </Button>
         <Button type="button" variant="outline" className="cursor-pointer gap-2" onClick={() => navigate("/practice")}>
@@ -147,8 +151,8 @@ export default function Dashboard() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="sm:col-span-2">
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Target className="size-5 text-primary" /> Daily goal
+            <CardTitle className="flex items-center gap-2 font-heading text-base uppercase tracking-widest text-[#00ff88] cyber-chromatic">
+              <Target className="size-5 text-[#00ff88]" /> Daily goal
             </CardTitle>
             <span className="text-sm text-muted-foreground">
               {reviewedToday} / {goal} reviewed
@@ -157,7 +161,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-primary transition-all"
+                className="h-full rounded-full bg-[#00ff88] shadow-[0_0_5px_#00ff88,0_0_10px_#00ff8840] transition-all"
                 style={{ width: `${goalPct}%` }}
               />
             </div>
@@ -170,8 +174,8 @@ export default function Dashboard() {
         </Card>
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Flame className="size-5 text-orange-500" /> Streak
+            <CardTitle className="flex items-center gap-2 font-heading text-base uppercase tracking-widest text-[#00ff88] cyber-chromatic">
+              <Flame className="size-5 text-[#ff6600]" /> Streak
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -192,6 +196,7 @@ export default function Dashboard() {
                           n === 0
                             ? "var(--muted)"
                             : `color-mix(in oklch, var(--primary) ${Math.round(intensity * 100)}%, transparent)`,
+                        boxShadow: n === 0 ? "none" : "0 0 3px #00ff8840",
                       }}
                       title={`${n} reviewed`}
                     />
@@ -207,47 +212,47 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <div className="cyber-chamfer rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Library className="size-5" />
-            </span>
+            <div className="rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] shadow-[0_0_5px_#00ff8840]">
+              <Library className="h-5 w-5" />
+            </div>
           </div>
-          <p className="mt-4 text-3xl font-semibold">{words?.length ?? 0}</p>
-          <p className="text-sm text-muted-foreground">Words saved</p>
+          <p className="mt-4 font-heading text-3xl font-semibold">{words?.length ?? 0}</p>
+          <p className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">Words saved</p>
         </div>
-        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <div className="cyber-chamfer rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-              <GraduationCap className="size-5" />
-            </span>
+            <div className="rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] shadow-[0_0_5px_#00ff8840]">
+              <GraduationCap className="h-5 w-5" />
+            </div>
           </div>
-          <p className="mt-4 text-3xl font-semibold">{dueCount ?? 0}</p>
-          <p className="text-sm text-muted-foreground">Cards due</p>
+          <p className="mt-4 font-heading text-3xl font-semibold">{dueCount ?? 0}</p>
+          <p className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">Cards due</p>
         </div>
-        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <div className="cyber-chamfer rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Sparkles className="size-5" />
-            </span>
+            <div className="rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] shadow-[0_0_5px_#00ff8840]">
+              <Sparkles className="h-5 w-5" />
+            </div>
           </div>
-          <p className="mt-4 text-3xl font-semibold">{mastered}</p>
-          <p className="text-sm text-muted-foreground">Mastered</p>
+          <p className="mt-4 font-heading text-3xl font-semibold">{mastered}</p>
+          <p className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">Mastered</p>
         </div>
-        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <div className="cyber-chamfer rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
-              <Captions className="size-5" />
-            </span>
+            <div className="rounded-lg bg-[#00ff8810] p-2 text-[#00ff88] shadow-[0_0_5px_#00ff8840]">
+              <Captions className="h-5 w-5" />
+            </div>
           </div>
-          <p className="mt-4 text-3xl font-semibold">{subtitles?.length ?? 0}</p>
-          <p className="text-sm text-muted-foreground">Subtitles</p>
+          <p className="mt-4 font-heading text-3xl font-semibold">{subtitles?.length ?? 0}</p>
+          <p className="font-mono text-xs uppercase tracking-wider text-[#6b7280]">Subtitles</p>
         </div>
       </div>
 
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight">Your subtitles</h2>
+          <h2 className="font-heading text-lg font-semibold uppercase tracking-widest text-[#00ff88] cyber-chromatic">Your subtitles</h2>
           <Button type="button" size="sm" className="cursor-pointer gap-1.5" onClick={() => setNewSubOpen(true)}>
             <Plus className="size-3.5" /> New
           </Button>
@@ -305,7 +310,7 @@ export default function Dashboard() {
                 key={s._id}
                 type="button"
                 onClick={() => navigate(`/watch/${s._id}`)}
-                className="group flex items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                className="group cyber-chamfer flex items-center gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-all hover:border-[#00ff88] hover:shadow-[0_0_5px_#00ff88,0_0_10px_#00ff8840]"
               >
                 {s.videoId ? (
                   <img src={`https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg`} alt="" className="size-16 shrink-0 rounded-lg object-cover" />
