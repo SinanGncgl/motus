@@ -1,17 +1,53 @@
 import * as React from "react"
-
+import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+const cardVariants = cva(
+  "bg-card text-card-foreground flex flex-col gap-6 border border-border cyber-chamfer py-6 shadow-sm transition-all duration-300",
+  {
+    variants: {
+      variant: {
+        default: "",
+        terminal: "bg-[#0a0a0f] relative overflow-hidden",
+        holographic: "bg-card/70 backdrop-blur-md relative overflow-hidden",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+function Card({
+  className,
+  variant = "default",
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof cardVariants>) {
   return (
     <div
       data-slot="card"
-      className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 border border-border cyber-chamfer py-6 shadow-sm transition-all duration-300",
-        className
-      )}
+      data-variant={variant}
+      className={cn(cardVariants({ variant, className }))}
       {...props}
     />
+  )
+}
+
+function CardTerminalHeader({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      className={cn("flex items-center gap-2 border-b border-border px-6 py-3", className)}
+      {...props}
+    >
+      <div className="flex gap-1.5">
+        <div className="size-2 rounded-full bg-[#ff3366]" />
+        <div className="size-2 rounded-full bg-[#f59e0b]" />
+        <div className="size-2 rounded-full bg-[#00ff88]" />
+      </div>
+      <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-[#6b7280]">
+        terminal
+      </span>
+    </div>
   )
 }
 
@@ -81,6 +117,18 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+function CardCornerAccents({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <>
+      <div className={cn("absolute top-0 left-0 h-4 w-4 border-t-2 border-l-2 border-[#00ff88]", className)} />
+      <div className={cn("absolute top-0 right-0 h-4 w-4 border-t-2 border-r-2 border-[#00ff88]", className)} />
+      <div className={cn("absolute bottom-0 left-0 h-4 w-4 border-b-2 border-l-2 border-[#00ff88]", className)} />
+      <div className={cn("absolute bottom-0 right-0 h-4 w-4 border-b-2 border-r-2 border-[#00ff88]", className)} />
+      <div {...props} />
+    </>
+  )
+}
+
 export {
   Card,
   CardHeader,
@@ -89,4 +137,7 @@ export {
   CardAction,
   CardDescription,
   CardContent,
+  CardTerminalHeader,
+  CardCornerAccents,
+  cardVariants,
 }
