@@ -34,7 +34,7 @@ function LocalRoute({ children }: { children: ReactNode }) { return <AppShell>{c
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <div className="dark min-h-screen bg-background text-foreground">
-      <BrowserRouter>
+      <BrowserRouter basename="/motus">
         <RouteSyncer />
         <Suspense fallback={<RouteLoading />}>
           <Routes>
