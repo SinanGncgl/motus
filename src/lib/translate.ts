@@ -28,19 +28,22 @@ async function translateViaServer(
   targetLang: string,
   sourceLang = "auto",
 ): Promise<TranslateResult> {
+  const base = (import.meta.env.VITE_LOCAL_API_URL as string | undefined) ?? "";
+  if (!base) return { ok: false, error: "not-configured" };
   try {
-    const res = await fetch("/api/translate", {
+    const res = await fetch(`${base}/api/translate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ q: text, source: sourceLang, target: targetLang, format: "text" }),
     });
     if (res.status === 501) return { ok: false, error: "not-configured" };
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
-    const data = (await res.json()) as { translatedText?: string };
+    if (!res.ok) return { ok: false, error: "not-configured" };
+    const data = (await res.json()) as { translatedText?: string; error?: string };
+    if (data.error) return { ok: false, error: "not-configured" };
     if (!data.translatedText) return { ok: false, error: "no-text" };
     return { ok: true, text: data.translatedText };
   } catch {
-    return { ok: false, error: "network" };
+    return { ok: false, error: "not-configured" };
   }
 }
 
@@ -52,7 +55,7 @@ async function translateViaEndpoint(
   // Self-hosted LibreTranslate is the zero-config default; users can override
   // via Settings (translationEndpoint).
   const { translationEndpoint, translationApiKey } = settings.get();
-  const endpoint = translationEndpoint || "http://127.0.0.1:5001/translate";
+  const endpoint = translationEndpoint || "https://traduzioni.serviziliberi.it/translate";
   try {
     const res = await fetch(endpoint, {
       method: "POST",

@@ -227,10 +227,6 @@ export default function Words() {
   const [translations, setTranslations] = useState<Record<string, string>>({});
 
   const handleTranslate = async (word: SavedWord) => {
-    if (!settings.get().translationEndpoint) {
-      toast.info("Add a translation endpoint in Settings to translate words.");
-      return;
-    }
     setTranslatingId(word._id);
     try {
       const userSource = settings.get().sourceLanguage;
