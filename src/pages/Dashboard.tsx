@@ -57,12 +57,15 @@ function daysUntil(ts: number | null): number | null {
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [words, refreshWords] = useLocalWords();
-  const [dueCount] = useDueCount();
-  const [subtitles, refreshSubtitles] = useLocalSubtitles();
+  const [words, refreshWords, wordsState] = useLocalWords();
+  const [dueCount, , dueState] = useDueCount();
+  const [subtitles, refreshSubtitles, subsState] = useLocalSubtitles();
   const navigate = useNavigate();
   const [newSubOpen, setNewSubOpen] = useState(false);
   const [collectionFilter, setCollectionFilter] = useState<string | null>(null);
+
+  const backendError = wordsState.error || dueState.error || subsState.error;
+  const isLoading = wordsState.loading && dueState.loading && subsState.loading;
 
   // Refresh word count when a word is saved from any page
   useEffect(() => {
@@ -120,6 +123,17 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-8">
+      {backendError && !isLoading && (
+        <div className="cyber-chamfer border border-[#ff336630] bg-[#ff336608] p-4 font-mono text-sm text-[#ff3366]">
+          <p className="font-semibold">Backend unreachable</p>
+          <p className="mt-1 text-xs text-[#6b7280]">
+            The server may be waking up (first load takes ~60s). Retrying automatically…
+          </p>
+          <button onClick={() => void refreshWords()} className="mt-2 text-xs text-[#00ff88] hover:underline">
+            Retry now
+          </button>
+        </div>
+      )}
       <header>
         <p className="text-sm font-medium text-muted-foreground">
           Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}

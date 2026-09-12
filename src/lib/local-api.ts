@@ -6,7 +6,7 @@ const SESSION_KEY = "motus.local.session";
 const dictionaryCache = new Map<string, { definition: string; example: string } | null>();
 
 function headers(extra: HeadersInit = {}) { const token = localStorage.getItem(SESSION_KEY); return { "Content-Type": "application/json", ...(token ? { "X-Local-Session": token } : {}), ...extra }; }
-async function request<T>(path: string, options: RequestInit = {}) { const response = await fetch(`${BASE}${path}`, { ...options, headers: headers(options.headers) }); if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || `Request failed (${response.status})`); } return response.json() as Promise<T>; }
+async function request<T>(path: string, options: RequestInit = {}) { const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 30_000); try { const response = await fetch(`${BASE}${path}`, { ...options, headers: headers(options.headers), signal: controller.signal }); if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || `Request failed (${response.status})`); } return response.json() as Promise<T>; } finally { clearTimeout(timeout); } }
 
 export const localApi = {
   async ensureSession() { if (!localStorage.getItem(SESSION_KEY)) { const result = await request<{ token: string }>("/api/auth/guest", { method: "POST" }); localStorage.setItem(SESSION_KEY, result.token); } return request<{ user: LocalUser }>("/api/auth/me"); },

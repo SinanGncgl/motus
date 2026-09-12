@@ -243,7 +243,7 @@ const server = createServer(async (req, res) => {
       }
     }
     if (!path.startsWith("/api/") && !path.startsWith("/grab") && path !== "/health") return staticFile(res, path);
-    if (req.method === "GET" && (path === "/health" || path === "/api/health")) return send(res, 200, { ok: true, local: true, ytDlp: true, db: "postgres", dbUrl: DATABASE_URL });
+    if (req.method === "GET" && (path === "/health" || path === "/api/health")) return send(res, 200, { ok: true, local: true, ytDlp: true, db: "postgres" });
     if (req.method === "POST" && path === "/api/auth/guest") {
       const token = randomUUID();
       await q("INSERT INTO sessions (token,user_id) VALUES ($1,$2) ON CONFLICT (token) DO UPDATE SET user_id = $2", [token, "local-user"]);
