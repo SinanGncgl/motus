@@ -23,9 +23,7 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - run: bun run build
-        env:
-          VITE_LOCAL_API_URL: https://motus-yfws.onrender.com
+      - run: VITE_LOCAL_API_URL=https://motus-yfws.onrender.com bun run build
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
