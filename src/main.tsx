@@ -34,7 +34,7 @@ function LocalRoute({ children }: { children: ReactNode }) { return <AppShell>{c
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <div className="dark min-h-screen bg-background text-foreground">
-      <BrowserRouter basename="/motus">
+      <BrowserRouter basename={import.meta.env.BASE_URL === "/motus/" ? "/motus" : undefined}>
         <RouteSyncer />
         <Suspense fallback={<RouteLoading />}>
           <Routes>
