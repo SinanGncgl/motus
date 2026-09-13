@@ -28,7 +28,13 @@ export const localApi = {
       return response.json() as Promise<{ ok: boolean }>;
     },
   },
-  cards: { due: (newCardsLimit?: number) => request<LocalCard[]>(`/api/cards/due${newCardsLimit != null ? `?newCardsLimit=${newCardsLimit}` : ""}`), dueCount: () => request<number>("/api/cards/due-count"), nextDue: () => request<{ nextDue: number | null }>("/api/cards/next-due"), rate: (cardId: string, rating: string) => request<CardRateResult>("/api/cards/rate", { method: "POST", body: JSON.stringify({ cardId, rating }) }), suspend: (cardId: string) => request<void>("/api/cards/suspend", { method: "POST", body: JSON.stringify({ cardId }) }) },
+  cards: { due: (newCardsLimit?: number, groupId?: string | null) => {
+    const params = new URLSearchParams();
+    if (newCardsLimit != null) params.set("newCardsLimit", String(newCardsLimit));
+    if (groupId) params.set("groupId", groupId);
+    const qs = params.toString();
+    return request<LocalCard[]>(`/api/cards/due${qs ? `?${qs}` : ""}`);
+  }, dueCount: () => request<number>("/api/cards/due-count"), nextDue: () => request<{ nextDue: number | null }>("/api/cards/next-due"), rate: (cardId: string, rating: string) => request<CardRateResult>("/api/cards/rate", { method: "POST", body: JSON.stringify({ cardId, rating }) }), suspend: (cardId: string) => request<void>("/api/cards/suspend", { method: "POST", body: JSON.stringify({ cardId }) }) },
   stats: {
     overview: () => request<{ totalWords: number; cardsDue: number; mastered: number; totalReviews: number; todayReviews: number; weeklyAccuracy: number }>("/api/stats/overview"),
     daily: () => request<{ days: Array<{ day_key: number; total: number; correct: number; again_count: number; hard_count: number }> }>("/api/stats/daily"),

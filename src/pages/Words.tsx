@@ -25,6 +25,7 @@ import { localApi } from "@/lib/local-api";
 import { speak } from "@/lib/tts";
 import { settings } from "@/lib/settings";
 import { translateLine } from "@/lib/translate";
+import type { LocalWordGroup } from "@/types";
 import {
   Bookmark,
   Captions,
@@ -89,10 +90,27 @@ export default function Words() {
   const [addExample, setAddExample] = useState("");
   const [isAdding, setIsAdding] = useState(false);
 
+  const [groups, setGroups] = useState<LocalWordGroup[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [showGroupDialog, setShowGroupDialog] = useState(false);
+  const [groupWordIds, setGroupWordIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    localApi.groups.list().then((r) => setGroups(r.groups ?? [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedGroupId) { setGroupWordIds(new Set()); return; }
+    localApi.groups.getWords(selectedGroupId).then((r) => {
+      setGroupWordIds(new Set(r.words.map((w: any) => w.id)));
+    }).catch(() => {});
+  }, [selectedGroupId]);
+
   const filtered = useMemo(() => {
     if (!words) return undefined;
     const q = query.trim().toLowerCase();
-    return words.filter((w) => {
+    let result = words.filter((w) => {
       if (statusFilter === "new" && w.cardBox > 0) return false;
       if (statusFilter === "learning" && (w.cardBox <= 0 || w.cardBox > 2)) return false;
       if (statusFilter === "mastered" && w.cardBox <= 2) return false;
@@ -102,7 +120,11 @@ export default function Words() {
         .toLowerCase()
         .includes(q);
     });
-  }, [words, query, statusFilter]);
+    if (selectedGroupId && groupWordIds.size > 0) {
+      result = result.filter(w => groupWordIds.has(w._id));
+    }
+    return result;
+  }, [words, query, statusFilter, selectedGroupId, groupWordIds]);
 
   const handleExport = async () => {
     if (!words || words.length === 0) return;
@@ -331,6 +353,31 @@ export default function Words() {
               {label}
             </button>
           ))}
+          <div className="h-4 w-px bg-border" />
+          {groups.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => setSelectedGroupId(selectedGroupId === g.id ? null : g.id)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                selectedGroupId === g.id
+                  ? "border-transparent text-white"
+                  : "text-muted-foreground hover:bg-accent"
+              }`}
+              style={selectedGroupId === g.id ? { backgroundColor: g.color } : undefined}
+            >
+              <span className="size-2 rounded-full" style={{ backgroundColor: g.color }} />
+              {g.name}
+              <span className="text-[10px] opacity-70">({g.word_count})</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowGroupDialog(true)}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+          >
+            + Group
+          </button>
           {selected.size > 0 && (
             <span className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
               {selected.size} selected
@@ -425,6 +472,18 @@ export default function Words() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value && word._id) {
+                          localApi.groups.addWords(e.target.value, [word._id]);
+                        }
+                        e.target.value = "";
+                      }}
+                      className="text-xs border rounded px-1 py-0.5 bg-background"
+                    >
+                      <option value="">Add to group…</option>
+                      {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
                     <Button
                       type="button"
                       variant="ghost"
@@ -628,6 +687,48 @@ export default function Words() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Create Group dialog */}
+      {showGroupDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="rounded-lg bg-card p-6 shadow-lg w-80 space-y-4">
+            <h3 className="font-semibold">Create Word Group</h3>
+            <input
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              placeholder="Group name"
+              className="w-full rounded border px-3 py-2 text-sm"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newGroupName.trim()) {
+                  localApi.groups.create(newGroupName.trim()).then(() => {
+                    localApi.groups.list().then((r) => setGroups(r.groups ?? []));
+                    setNewGroupName("");
+                    setShowGroupDialog(false);
+                  });
+                }
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowGroupDialog(false)} className="px-3 py-1.5 text-sm text-muted-foreground">Cancel</button>
+              <button
+                onClick={() => {
+                  if (newGroupName.trim()) {
+                    localApi.groups.create(newGroupName.trim()).then(() => {
+                      localApi.groups.list().then((r) => setGroups(r.groups ?? []));
+                      setNewGroupName("");
+                      setShowGroupDialog(false);
+                    });
+                  }
+                }}
+                className="rounded bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

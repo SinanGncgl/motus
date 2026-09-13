@@ -36,8 +36,8 @@ export function useLocalWords() {
   return useResource<LocalWord[]>(localApi.words.list);
 }
 
-export function useDueCards() {
-  return useResource<LocalCard[]>(() => localApi.cards.due(settings.get().newCardsPerDay));
+export function useDueCards(groupId?: string | null) {
+  return useResource<LocalCard[]>(() => localApi.cards.due(settings.get().newCardsPerDay, groupId));
 }
 
 export function useDueCount() {

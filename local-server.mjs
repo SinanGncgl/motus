@@ -454,14 +454,25 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "GET" && path === "/api/cards/due") {
       const suspendCutoff = now() + 300 * 86400000;
-      const due = await q(
-         `SELECT c.id, c.front, c.back, c.box, c.due_at, c.leech_count, c.card_type, c.saved_word_id, c.last_reviewed_at, c.ease_factor, w.translation, w.definition, w.example, w.source_title, w.language
+      const groupId = u.searchParams.get("groupId");
+      let query, params;
+      if (groupId) {
+        query = `SELECT c.id, c.front, c.back, c.box, c.due_at, c.leech_count, c.card_type, c.saved_word_id, c.last_reviewed_at, c.ease_factor, w.translation, w.definition, w.example, w.source_title, w.language
+         FROM anki_cards c
+         LEFT JOIN saved_words w ON c.saved_word_id = w.id
+         JOIN word_group_members m ON m.word_id = c.saved_word_id
+         WHERE c.user_id = $1 AND c.due_at <= $2 AND c.due_at < $3 AND m.group_id = $4
+         ORDER BY c.due_at ASC LIMIT 200`;
+        params = [uid, now(), suspendCutoff, groupId];
+      } else {
+        query = `SELECT c.id, c.front, c.back, c.box, c.due_at, c.leech_count, c.card_type, c.saved_word_id, c.last_reviewed_at, c.ease_factor, w.translation, w.definition, w.example, w.source_title, w.language
          FROM anki_cards c
          LEFT JOIN saved_words w ON c.saved_word_id = w.id
          WHERE c.user_id = $1 AND c.due_at <= $2 AND c.due_at < $3
-         ORDER BY c.due_at ASC LIMIT 200`,
-        [uid, now(), suspendCutoff],
-      );
+         ORDER BY c.due_at ASC LIMIT 200`;
+        params = [uid, now(), suspendCutoff];
+      }
+      const due = await q(query, params);
       // Limit new cards per day — only count cards never reviewed before
       const newCardsLimit = parseInt(u.searchParams.get("newCardsLimit") || "10", 10);
       let newCardsSeen = 0;

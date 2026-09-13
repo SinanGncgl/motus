@@ -31,6 +31,7 @@ import {
 import { useEffect, useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import type { LocalWordGroup } from "@/types";
 
 type Card = LocalCard;
 
@@ -47,7 +48,9 @@ function formatNextDue(ms: number): string {
 }
 
 export default function Practice() {
-  const [due, refreshDue] = useDueCards();
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [groups, setGroups] = useState<LocalWordGroup[]>([]);
+  const [due, refreshDue] = useDueCards(selectedGroupId);
   const navigate = useNavigate();
 
   const [reviewed, setReviewed] = useState<Set<string>>(new Set());
@@ -60,6 +63,10 @@ export default function Practice() {
   const [mode, setMode] = useState<PracticeMode>("flashcard");
   const [allWords] = useLocalWords();
   const [nextReviewInfo, setNextReviewInfo] = useState<string | null>(null);
+
+  useEffect(() => {
+    localApi.groups.list().then((r) => setGroups(r.groups ?? [])).catch(() => {});
+  }, []);
 
   const queue = useMemo(() => {
     const fresh = (due ?? []).filter((c) => !reviewed.has(c.id ?? c._id ?? ""));
@@ -288,6 +295,22 @@ export default function Practice() {
           </button>
         ))}
       </div>
+
+      {groups.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Group:</span>
+          <select
+            value={selectedGroupId ?? ""}
+            onChange={(e) => setSelectedGroupId(e.target.value || null)}
+            className="rounded border bg-background px-2 py-1 text-xs"
+          >
+            <option value="">All cards</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>{g.name} ({g.word_count})</option>
+            ))}
+          </select>
+        </div>
+      )}
 
 
       <Progress value={(reviewedCount / Math.max(totalCount, 1)) * 100} />
