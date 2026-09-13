@@ -425,7 +425,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/api/cards/due") {
       const suspendCutoff = now() + 300 * 86400000;
       const due = await q(
-         `SELECT c.id, c.front, c.back, c.box, c.due_at, c.leech_count, c.card_type, c.saved_word_id, c.last_reviewed_at, c.ease_factor, w.translation, w.definition, w.example, w.language
+         `SELECT c.id, c.front, c.back, c.box, c.due_at, c.leech_count, c.card_type, c.saved_word_id, c.last_reviewed_at, c.ease_factor, w.translation, w.definition, w.example, w.source_title, w.language
          FROM anki_cards c
          LEFT JOIN saved_words w ON c.saved_word_id = w.id
          WHERE c.user_id = $1 AND c.due_at <= $2 AND c.due_at < $3
@@ -443,16 +443,11 @@ const server = createServer(async (req, res) => {
         return true;
       });
       return send(res, 200, filtered.map((c) => {
-        let back = c.back || "";
-        if (c.translation && !back.includes("Translation:")) {
-          const parts = [back, `Translation: ${c.translation}`].filter(Boolean);
-          back = parts.join("\n\n");
-        } else if (!c.translation && c.definition && !back.includes(c.definition)) {
-          const parts = [];
-          if (c.definition) parts.push(c.definition);
-          if (c.example) parts.push(`Context: ${c.example}`);
-          back = parts.join("\n\n") || c.front;
-        }
+        const back = formatCardBack(
+          { definition: c.definition, example: c.example, translation: c.translation, sourceTitle: c.source_title },
+          c.front,
+          c.card_type || "word"
+        );
         const hasScreenshot = c.saved_word_id && existsSync(join(SCREENSHOTS_DIR, `${c.saved_word_id}.jpg`));
         return {
           id: c.id,
