@@ -57,7 +57,6 @@ export default function Practice() {
   const [incorrectCount, setIncorrectCount] = useState(0);
 
   const [mode, setMode] = useState<PracticeMode>("flashcard");
-  const [cardType, setCardType] = useState<"word" | "sentence">("word");
   const [allWords] = useLocalWords();
   const [nextReviewInfo, setNextReviewInfo] = useState<string | null>(null);
 
@@ -140,10 +139,6 @@ export default function Practice() {
   useEffect(() => {
     setNextReviewInfo(null);
     setFlipped(false);
-    if (current) {
-      const isSentence = current.cardType === "sentence";
-      setCardType(isSentence ? "sentence" : "word");
-    }
   }, [current?.id]);
 
   // Auto-play pronunciation when a new card appears
@@ -333,13 +328,13 @@ export default function Practice() {
               style={{ backfaceVisibility: "hidden" }}
             >
               <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                cardType === "sentence" 
+                (current.cardType ?? "word") === "sentence" 
                   ? "bg-blue-500/10 text-blue-500" 
                   : "bg-purple-500/10 text-purple-500"
               }`}>
-                {cardType === "sentence" ? "Sentence" : "Word"}
+                {(current.cardType ?? "word") === "sentence" ? "Sentence" : "Word"}
               </span>
-              {current.cardType === "sentence" ? (
+              {(current.cardType ?? "word") === "sentence" ? (
                 <>
                   <Badge variant="outline" className="text-xs font-normal">
                     Fill in the blank
@@ -387,7 +382,7 @@ export default function Practice() {
                   <p className="text-xl font-semibold tracking-tight">
                     {current.front}
                   </p>
-                  {current.cardType === "word" && (
+                   {(current.cardType ?? "word") === "word" && (
                     <SpeakerButton
                       text={current.front}
                       lang={current.language || "de"}
@@ -407,7 +402,7 @@ export default function Practice() {
                 </div>
               </div>
               <div className="flex flex-col gap-4 overflow-y-auto">
-                {current.screenshotUrl && current.cardType === "word" && (
+                 {current.screenshotUrl && (current.cardType ?? "word") === "word" && (
                   <img
                     src={current.screenshotUrl}
                     alt=""
