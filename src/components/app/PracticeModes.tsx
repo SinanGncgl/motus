@@ -106,7 +106,7 @@ export function ClozePractice({ words, cards, onResult, onRate }: {
 
   const submit = () => {
     if (checked !== null) return;
-    const ok = answerMatches(answer, current.display);
+    const ok = answerMatches(answer, current.display).correct;
     setChecked(ok);
     onResult?.(ok);
     onRate?.(current.cardId, ok ? "good" : "again");
@@ -289,7 +289,7 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
           onChange={(e) => setAnswer(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !revealed) {
-              const ok = answerMatches(answer, current.sentence);
+              const ok = answerMatches(answer, current.sentence).correct;
               setRevealed(true);
               onResult?.(ok);
               onRate?.(current.cardId, ok ? "good" : "again");
@@ -304,7 +304,7 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
           <div className="mt-4 rounded-lg bg-muted/50 p-3 text-sm">
             <p className="font-medium text-foreground">{current.sentence}</p>
             <p className="mt-1 text-muted-foreground">
-              {answerMatches(answer, current.sentence)
+              {answerMatches(answer, current.sentence).correct
                 ? "✓ Matches — nice listening!"
                 : "Compare your typing above with the original."}
             </p>
@@ -316,7 +316,7 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
             className="cursor-pointer"
             onClick={() => {
               if (revealed) return;
-              const ok = answerMatches(answer, current.sentence);
+              const ok = answerMatches(answer, current.sentence).correct;
               setRevealed(true);
               onResult?.(ok);
               onRate?.(current.cardId, ok ? "good" : "again");

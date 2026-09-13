@@ -1,5 +1,4 @@
 import { localApi, type LocalWord } from "@/lib/local-api";
-import { normalizeWord } from "@/lib/subtitles";
 import { settings } from "@/lib/settings";
 import { isCommonWord } from "@/lib/stopwords";
 import { toast } from "sonner";
@@ -129,14 +128,44 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-/** Loose match for typed answers (ignores case, surrounding punctuation). */
-export function answerMatches(typed: string, target: string): boolean {
-  const clean = (s: string) => normalizeWord(s).trim().toLowerCase();
-  const t = clean(typed);
-  const g = clean(target);
-  if (!t || !g) return false;
-  if (t === g) return true;
-  return t.includes(g) || g.includes(t);
+function normalizeText(s: string): string {
+  return s.trim().toLowerCase().replace(/[.,!?;:'"]/g, "");
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+export function answerMatches(userInput: string, correctAnswer: string, mode?: string): { correct: boolean; distance?: number } {
+  const normalizedInput = normalizeText(userInput);
+  const normalizedAnswer = normalizeText(correctAnswer);
+
+  // Exact match after normalization
+  if (normalizedInput === normalizedAnswer) return { correct: true, distance: 0 };
+
+  // Levenshtein distance for typo tolerance (max 2 edits)
+  const distance = levenshtein(normalizedInput, normalizedAnswer);
+  if (distance <= 2) return { correct: true, distance };
+
+  // Partial match: user answer is contained in correct answer or vice versa
+  if (normalizedAnswer.includes(normalizedInput) || normalizedInput.includes(normalizedAnswer)) {
+    return { correct: true, distance };
+  }
+
+  return { correct: false, distance };
 }
 
 export async function getSavedWords(): Promise<LocalWord[]> {
