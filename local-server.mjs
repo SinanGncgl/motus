@@ -524,7 +524,7 @@ const server = createServer(async (req, res) => {
         "UPDATE anki_cards SET box=$1, due_at=$2, last_reviewed_at=$3, leech_count=$4, ease_factor=$5 WHERE id=$6",
         [newBox, dueAt, now(), leechCount, newEase, c.id]
       );
-      return send(res, 200, { ok: true, leech: leechCount >= 3 });
+      return send(res, 200, { ok: true, leech: leechCount >= 3, nextDue: dueAt, intervalMs });
     }
 
     if (req.method === "POST" && path === "/api/transcript") { const a = await body(req); return send(res, 200, { videoId: a.videoId, lines: await transcript(a.videoId, a.lang) }); }

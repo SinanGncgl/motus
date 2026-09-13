@@ -59,6 +59,7 @@ export default function Practice() {
   const [mode, setMode] = useState<PracticeMode>("flashcard");
   const [allWords] = useLocalWords();
   const [nextDueMs, setNextDueMs] = useState<number | null>(null);
+  const [nextReviewInfo, setNextReviewInfo] = useState<string | null>(null);
 
   const queue = useMemo(() => {
     const fresh = (due ?? []).filter((c) => !reviewed.has(c.id ?? c._id ?? ""));
@@ -89,7 +90,16 @@ export default function Practice() {
     else setCorrectCount((n) => n + 1);
     setIsRating(true);
     try {
-      await localApi.cards.rate(current.id ?? current._id ?? "", rating);
+      const result = await localApi.cards.rate(current.id ?? current._id ?? "", rating);
+      if (result.nextDue) {
+        const diff = result.nextDue - Date.now();
+        const mins = Math.floor(diff / 60000);
+        const hours = Math.floor(mins / 60);
+        const days = Math.floor(hours / 24);
+        if (days > 0) setNextReviewInfo(`Next review: ${days} day${days > 1 ? "s" : ""}`);
+        else if (hours > 0) setNextReviewInfo(`Next review: ${hours}h`);
+        else setNextReviewInfo(`Next review: ${mins} min`);
+      }
       await refreshDue();
       setReviewed((prev) => {
         const next = new Set(prev);
@@ -132,6 +142,11 @@ export default function Practice() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [handleRate]);
+
+  useEffect(() => {
+    setNextReviewInfo(null);
+    setFlipped(false);
+  }, [current?.id]);
 
   // Auto-play pronunciation when a new card appears
   useEffect(() => {
@@ -484,6 +499,9 @@ export default function Practice() {
         <p className="mt-3 text-center text-xs text-muted-foreground">
           Space flips the card · 1 / 2 / 3 / 4 rates it
         </p>
+        {nextReviewInfo && (
+          <p className="mt-2 text-center text-xs text-muted-foreground">{nextReviewInfo}</p>
+        )}
       </div>
       ) : (
         <div className="mx-auto w-full max-w-2xl">

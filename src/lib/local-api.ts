@@ -1,5 +1,5 @@
-import type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard } from "@/types";
-export type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard };
+import type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard, CardRateResult } from "@/types";
+export type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard, CardRateResult };
 
 const BASE = (import.meta.env.VITE_LOCAL_API_URL as string | undefined) ?? "";
 const SESSION_KEY = "motus.local.session";
@@ -28,7 +28,7 @@ export const localApi = {
       return response.json() as Promise<{ ok: boolean }>;
     },
   },
-  cards: { due: (newCardsLimit?: number) => request<LocalCard[]>(`/api/cards/due${newCardsLimit != null ? `?newCardsLimit=${newCardsLimit}` : ""}`), dueCount: () => request<number>("/api/cards/due-count"), nextDue: () => request<{ nextDue: number | null }>("/api/cards/next-due"), rate: (cardId: string, rating: string) => request<void>("/api/cards/rate", { method: "POST", body: JSON.stringify({ cardId, rating }) }), suspend: (cardId: string) => request<void>("/api/cards/suspend", { method: "POST", body: JSON.stringify({ cardId }) }) },
+  cards: { due: (newCardsLimit?: number) => request<LocalCard[]>(`/api/cards/due${newCardsLimit != null ? `?newCardsLimit=${newCardsLimit}` : ""}`), dueCount: () => request<number>("/api/cards/due-count"), nextDue: () => request<{ nextDue: number | null }>("/api/cards/next-due"), rate: (cardId: string, rating: string) => request<CardRateResult>("/api/cards/rate", { method: "POST", body: JSON.stringify({ cardId, rating }) }), suspend: (cardId: string) => request<void>("/api/cards/suspend", { method: "POST", body: JSON.stringify({ cardId }) }) },
   transcript: (videoId: string, lang?: string) => request<{ videoId: string; lines: LocalLine[] }>("/api/transcript", { method: "POST", body: JSON.stringify({ videoId, lang }) }),
   dictionary: async (word: string) => {
     const cached = dictionaryCache.get(word);

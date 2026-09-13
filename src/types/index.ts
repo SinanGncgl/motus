@@ -44,6 +44,13 @@ export interface LocalWord {
   cardDueAt: number | null;
 }
 
+export interface CardRateResult {
+  ok: boolean;
+  leech: boolean;
+  nextDue: number;
+  intervalMs: number;
+}
+
 export interface LocalCard {
   id: string;
   _id?: string;
