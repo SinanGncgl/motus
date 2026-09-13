@@ -1,5 +1,5 @@
-import type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard, CardRateResult } from "@/types";
-export type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard, CardRateResult };
+import type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard, CardRateResult, LocalWordGroup } from "@/types";
+export type { LocalUser, LocalLine, LocalSubtitle, LocalWord, LocalCard, CardRateResult, LocalWordGroup };
 
 const BASE = (import.meta.env.VITE_LOCAL_API_URL as string | undefined) ?? "";
 const SESSION_KEY = "motus.local.session";
@@ -36,6 +36,32 @@ export const localApi = {
     maturity: () => request<{ distribution: Array<{ box: number; count: number }> }>("/api/stats/maturity"),
   },
   transcript: (videoId: string, lang?: string) => request<{ videoId: string; lines: LocalLine[] }>("/api/transcript", { method: "POST", body: JSON.stringify({ videoId, lang }) }),
+  groups: {
+    list: () => request<{ groups: LocalWordGroup[] }>("/api/groups"),
+    create: (name: string, color?: string) =>
+      request<{ ok: boolean; id: string; name: string; color: string }>("/api/groups", {
+        method: "POST",
+        body: JSON.stringify({ name, color }),
+      }),
+    update: (id: string, data: { name?: string; color?: string }) =>
+      request<{ ok: boolean }>(`/api/groups/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      request<{ ok: boolean }>(`/api/groups/${id}`, { method: "DELETE" }),
+    addWords: (groupId: string, wordIds: string[]) =>
+      request<{ ok: boolean; added: number }>(`/api/groups/${groupId}/words`, {
+        method: "POST",
+        body: JSON.stringify({ wordIds }),
+      }),
+    removeWord: (groupId: string, wordId: string) =>
+      request<{ ok: boolean }>(`/api/groups/${groupId}/words/${wordId}`, {
+        method: "DELETE",
+      }),
+    getWords: (groupId: string) =>
+      request<{ words: any[] }>(`/api/groups/${groupId}/words`),
+  },
   dictionary: async (word: string) => {
     const cached = dictionaryCache.get(word);
     if (cached !== undefined) return cached;

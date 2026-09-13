@@ -102,6 +102,21 @@ CREATE INDEX IF NOT EXISTS idx_review_logs_user_time
   ON review_logs(user_id, reviewed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_review_logs_card
   ON review_logs(card_id, reviewed_at DESC);
+CREATE TABLE IF NOT EXISTS word_groups (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  color TEXT DEFAULT '#6366f1',
+  created_at BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_word_groups_user ON word_groups(user_id);
+CREATE TABLE IF NOT EXISTS word_group_members (
+  group_id TEXT NOT NULL,
+  word_id TEXT NOT NULL,
+  PRIMARY KEY (group_id, word_id)
+);
+ALTER TABLE word_group_members ADD CONSTRAINT fk_group FOREIGN KEY (group_id) REFERENCES word_groups(id) ON DELETE CASCADE;
+ALTER TABLE word_group_members ADD CONSTRAINT fk_word FOREIGN KEY (word_id) REFERENCES saved_words(id) ON DELETE CASCADE;
 `;
 
 const id = (p) => `${p}_${randomUUID()}`;
@@ -840,6 +855,83 @@ const server = createServer(async (req, res) => {
         [uid]
       );
       return send(res, 200, { distribution: rows.rows });
+    }
+
+    // ---- word groups ----
+    if (req.method === "GET" && u && req.url === "/api/groups") {
+      const rows = await q(
+        `SELECT g.*, COUNT(m.word_id)::int AS word_count
+         FROM word_groups g
+         LEFT JOIN word_group_members m ON m.group_id = g.id
+         WHERE g.user_id = $1
+         GROUP BY g.id
+         ORDER BY g.name`,
+        [uid]
+      );
+      return send(res, 200, { groups: rows.rows });
+    }
+    if (req.method === "POST" && u && req.url === "/api/groups") {
+      const a = await body(req);
+      const name = String(a?.name ?? "").trim();
+      if (!name) return fail(res, 400, "Group name required");
+      const grpId = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const color = String(a?.color ?? "#6366f1");
+      await q(
+        "INSERT INTO word_groups(id, user_id, name, color, created_at) VALUES($1,$2,$3,$4,$5)",
+        [grpId, uid, name, color, Date.now()]
+      );
+      return send(res, 200, { ok: true, id: grpId, name, color });
+    }
+    const groupMatch = req.url?.match(/^\/api\/groups\/([^/]+)$/);
+    if (req.method === "PATCH" && u && groupMatch) {
+      const a = await body(req);
+      const groupId = groupMatch[1];
+      const g = (await q("SELECT * FROM word_groups WHERE id=$1 AND user_id=$2", [groupId, uid])).rows[0];
+      if (!g) return fail(res, 404, "Group not found");
+      const name = String(a?.name ?? g.name).trim();
+      const color = String(a?.color ?? g.color);
+      await q("UPDATE word_groups SET name=$1, color=$2 WHERE id=$3", [name, color, groupId]);
+      return send(res, 200, { ok: true });
+    }
+    if (req.method === "DELETE" && u && groupMatch) {
+      const groupId = groupMatch[1];
+      await q("DELETE FROM word_group_members WHERE group_id=$1", [groupId]);
+      await q("DELETE FROM word_groups WHERE id=$1 AND user_id=$2", [groupId, uid]);
+      return send(res, 200, { ok: true });
+    }
+    const groupWordsMatch = req.url?.match(/^\/api\/groups\/([^/]+)\/words$/);
+    if (req.method === "POST" && u && groupWordsMatch) {
+      const groupId = groupWordsMatch[1];
+      const g = (await q("SELECT id FROM word_groups WHERE id=$1 AND user_id=$2", [groupId, uid])).rows[0];
+      if (!g) return fail(res, 404, "Group not found");
+      const a = await body(req);
+      const wordIds = a?.wordIds ?? [];
+      for (const wid of wordIds) {
+        await q(
+          "INSERT INTO word_group_members(group_id, word_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
+          [groupId, wid]
+        );
+      }
+      return send(res, 200, { ok: true, added: wordIds.length });
+    }
+    if (req.method === "GET" && u && groupWordsMatch) {
+      const groupId = groupWordsMatch[1];
+      const rows = await q(
+        `SELECT sw.*, c.box AS card_box, c.due_at AS card_due_at
+         FROM word_group_members m
+         JOIN saved_words sw ON sw.id = m.word_id
+         LEFT JOIN anki_cards c ON c.saved_word_id = sw.id AND c.card_type = 'word'
+         WHERE m.group_id = $1
+         ORDER BY sw.word`,
+        [groupId]
+      );
+      return send(res, 200, { words: rows.rows });
+    }
+    const groupWordMatch = req.url?.match(/^\/api\/groups\/([^/]+)\/words\/([^/]+)$/);
+    if (req.method === "DELETE" && u && groupWordMatch) {
+      const [, groupId, wordId] = groupWordMatch;
+      await q("DELETE FROM word_group_members WHERE group_id=$1 AND word_id=$2", [groupId, wordId]);
+      return send(res, 200, { ok: true });
     }
 
     return fail(res, 404, "Not found");

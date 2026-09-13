@@ -65,3 +65,11 @@ export interface LocalCard {
   language?: string;
   easeFactor?: number;
 }
+
+export interface LocalWordGroup {
+  id: string;
+  name: string;
+  color: string;
+  word_count: number;
+  created_at: number;
+}
