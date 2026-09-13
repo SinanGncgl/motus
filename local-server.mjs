@@ -368,6 +368,22 @@ const server = createServer(async (req, res) => {
             await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [upd.display || w.display, formatCardBack(upd, w.display), c.id]);
           }
         }
+        // Update sentence card back if it exists
+        const sc = await q1("SELECT id, front FROM anki_cards WHERE saved_word_id = $1 AND card_type = 'sentence'", [p[2]]);
+        if (sc) {
+          const updatedWord = upd.display || w.display;
+          // Update front if example changed
+          let newFront = sc.front;
+          const newExample = upd.example ?? w.example;
+          if (newExample && newExample.trim()) {
+            const normalizedWord = updatedWord.trim();
+            const re = new RegExp(`\\b${normalizedWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+            newFront = newExample.replace(re, "____");
+          }
+          const rawExample = newExample ?? "";
+          const newBack = `${rawExample}\n\n${formatCardBack(upd, updatedWord)}`;
+          await q("UPDATE anki_cards SET front = $1, back = $2 WHERE id = $3", [newFront, newBack, sc.id]);
+        }
         return send(res, 200, { ok: true });
       }
       if (req.method === "DELETE") {
