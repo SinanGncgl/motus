@@ -773,6 +773,75 @@ const server = createServer(async (req, res) => {
         return send(res, 502, { error: "DEEPL_UPSTREAM", message: e instanceof Error ? e.message : "upstream error" });
       }
     }
+    if (req.method === "GET" && u && req.url === "/api/stats/overview") {
+      const wordsRes = await q("SELECT COUNT(*)::int AS count FROM saved_words WHERE user_id=$1", [u.id]);
+      const cardsRes = await q("SELECT COUNT(*)::int AS count FROM anki_cards WHERE user_id=$1 AND due_at <= $2", [u.id, Date.now()]);
+      const masteredRes = await q("SELECT COUNT(*)::int AS count FROM anki_cards WHERE user_id=$1 AND box >= 3", [u.id]);
+      const totalReviewsRes = await q("SELECT COUNT(*)::int AS count FROM review_logs WHERE user_id=$1", [u.id]);
+      const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+      const todayReviewsRes = await q("SELECT COUNT(*)::int AS count FROM review_logs WHERE user_id=$1 AND reviewed_at >= $2", [u.id, todayStart.getTime()]);
+      const accuracyRes = await q(
+        "SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE rating IN ('good','easy'))::int AS correct FROM review_logs WHERE user_id=$1 AND reviewed_at >= $2",
+        [u.id, Date.now() - 7 * 86400000]
+      );
+      return send(res, 200, {
+        totalWords: wordsRes.rows[0]?.count ?? 0,
+        cardsDue: cardsRes.rows[0]?.count ?? 0,
+        mastered: masteredRes.rows[0]?.count ?? 0,
+        totalReviews: totalReviewsRes.rows[0]?.count ?? 0,
+        todayReviews: todayReviewsRes.rows[0]?.count ?? 0,
+        weeklyAccuracy: accuracyRes.rows[0]?.total
+          ? Math.round((accuracyRes.rows[0].correct / accuracyRes.rows[0].total) * 100)
+          : 0,
+      });
+    }
+
+    if (req.method === "GET" && u && req.url === "/api/stats/daily") {
+      const thirtyDaysAgo = Date.now() - 30 * 86400000;
+      const rows = await q(
+        `SELECT
+           (reviewed_at / 86400000) AS day_key,
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE rating IN ('good','easy'))::int AS correct,
+           COUNT(*) FILTER (WHERE rating = 'again')::int AS again_count,
+           COUNT(*) FILTER (WHERE rating = 'hard')::int AS hard_count
+         FROM review_logs
+         WHERE user_id = $1 AND reviewed_at >= $2
+         GROUP BY day_key
+         ORDER BY day_key`,
+        [u.id, thirtyDaysAgo]
+      );
+      return send(res, 200, { days: rows.rows });
+    }
+
+    if (req.method === "GET" && u && req.url === "/api/stats/hard-words") {
+      const rows = await q(
+        `SELECT
+           c.id AS card_id, c.front, c.card_type, c.leech_count, c.ease_factor,
+           COUNT(r.id)::int AS review_count,
+           COUNT(*) FILTER (WHERE r.rating = 'again')::int AS again_count,
+           sw.word, sw.display, sw.definition
+         FROM review_logs r
+         JOIN anki_cards c ON c.id = r.card_id
+         LEFT JOIN saved_words sw ON sw.id = c.saved_word_id
+         WHERE r.user_id = $1
+         GROUP BY c.id, c.front, c.card_type, c.leech_count, c.ease_factor, sw.word, sw.display, sw.definition
+         HAVING COUNT(*) FILTER (WHERE r.rating = 'again') >= 2
+         ORDER BY again_count DESC, review_count DESC
+         LIMIT 20`,
+        [u.id]
+      );
+      return send(res, 200, { words: rows.rows });
+    }
+
+    if (req.method === "GET" && u && req.url === "/api/stats/maturity") {
+      const rows = await q(
+        `SELECT box, COUNT(*)::int AS count FROM anki_cards WHERE user_id=$1 GROUP BY box ORDER BY box`,
+        [u.id]
+      );
+      return send(res, 200, { distribution: rows.rows });
+    }
+
     return fail(res, 404, "Not found");
   } catch (e) {
     console.error(e);
