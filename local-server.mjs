@@ -774,15 +774,15 @@ const server = createServer(async (req, res) => {
       }
     }
     if (req.method === "GET" && u && req.url === "/api/stats/overview") {
-      const wordsRes = await q("SELECT COUNT(*)::int AS count FROM saved_words WHERE user_id=$1", [u.id]);
-      const cardsRes = await q("SELECT COUNT(*)::int AS count FROM anki_cards WHERE user_id=$1 AND due_at <= $2", [u.id, Date.now()]);
-      const masteredRes = await q("SELECT COUNT(*)::int AS count FROM anki_cards WHERE user_id=$1 AND box >= 3", [u.id]);
-      const totalReviewsRes = await q("SELECT COUNT(*)::int AS count FROM review_logs WHERE user_id=$1", [u.id]);
+      const wordsRes = await q("SELECT COUNT(*)::int AS count FROM saved_words WHERE user_id=$1", [uid]);
+      const cardsRes = await q("SELECT COUNT(*)::int AS count FROM anki_cards WHERE user_id=$1 AND due_at <= $2", [uid, Date.now()]);
+      const masteredRes = await q("SELECT COUNT(*)::int AS count FROM anki_cards WHERE user_id=$1 AND box >= 3", [uid]);
+      const totalReviewsRes = await q("SELECT COUNT(*)::int AS count FROM review_logs WHERE user_id=$1", [uid]);
       const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-      const todayReviewsRes = await q("SELECT COUNT(*)::int AS count FROM review_logs WHERE user_id=$1 AND reviewed_at >= $2", [u.id, todayStart.getTime()]);
+      const todayReviewsRes = await q("SELECT COUNT(*)::int AS count FROM review_logs WHERE user_id=$1 AND reviewed_at >= $2", [uid, todayStart.getTime()]);
       const accuracyRes = await q(
         "SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE rating IN ('good','easy'))::int AS correct FROM review_logs WHERE user_id=$1 AND reviewed_at >= $2",
-        [u.id, Date.now() - 7 * 86400000]
+        [uid, Date.now() - 7 * 86400000]
       );
       return send(res, 200, {
         totalWords: wordsRes.rows[0]?.count ?? 0,
@@ -809,7 +809,7 @@ const server = createServer(async (req, res) => {
          WHERE user_id = $1 AND reviewed_at >= $2
          GROUP BY day_key
          ORDER BY day_key`,
-        [u.id, thirtyDaysAgo]
+        [uid, thirtyDaysAgo]
       );
       return send(res, 200, { days: rows.rows });
     }
@@ -829,7 +829,7 @@ const server = createServer(async (req, res) => {
          HAVING COUNT(*) FILTER (WHERE r.rating = 'again') >= 2
          ORDER BY again_count DESC, review_count DESC
          LIMIT 20`,
-        [u.id]
+        [uid]
       );
       return send(res, 200, { words: rows.rows });
     }
@@ -837,7 +837,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && u && req.url === "/api/stats/maturity") {
       const rows = await q(
         `SELECT box, COUNT(*)::int AS count FROM anki_cards WHERE user_id=$1 GROUP BY box ORDER BY box`,
-        [u.id]
+        [uid]
       );
       return send(res, 200, { distribution: rows.rows });
     }
