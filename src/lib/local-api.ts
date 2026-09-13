@@ -29,6 +29,12 @@ export const localApi = {
     },
   },
   cards: { due: (newCardsLimit?: number) => request<LocalCard[]>(`/api/cards/due${newCardsLimit != null ? `?newCardsLimit=${newCardsLimit}` : ""}`), dueCount: () => request<number>("/api/cards/due-count"), nextDue: () => request<{ nextDue: number | null }>("/api/cards/next-due"), rate: (cardId: string, rating: string) => request<CardRateResult>("/api/cards/rate", { method: "POST", body: JSON.stringify({ cardId, rating }) }), suspend: (cardId: string) => request<void>("/api/cards/suspend", { method: "POST", body: JSON.stringify({ cardId }) }) },
+  stats: {
+    overview: () => request<{ totalWords: number; cardsDue: number; mastered: number; totalReviews: number; todayReviews: number; weeklyAccuracy: number }>("/api/stats/overview"),
+    daily: () => request<{ days: Array<{ day_key: number; total: number; correct: number; again_count: number; hard_count: number }> }>("/api/stats/daily"),
+    hardWords: () => request<{ words: Array<{ card_id: string; front: string; card_type: string; leech_count: number; ease_factor: number; review_count: number; again_count: number; word: string; display: string; definition: string }> }>("/api/stats/hard-words"),
+    maturity: () => request<{ distribution: Array<{ box: number; count: number }> }>("/api/stats/maturity"),
+  },
   transcript: (videoId: string, lang?: string) => request<{ videoId: string; lines: LocalLine[] }>("/api/transcript", { method: "POST", body: JSON.stringify({ videoId, lang }) }),
   dictionary: async (word: string) => {
     const cached = dictionaryCache.get(word);
