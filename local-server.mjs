@@ -365,7 +365,7 @@ const server = createServer(async (req, res) => {
           if (upd.resetCard) {
             await q("UPDATE anki_cards SET box=0, due_at=$1, last_reviewed_at=NULL WHERE id=$2", [now(), c.id]);
           } else {
-            await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [upd.display || w.display, formatCardBack(upd, w.display), c.id]);
+            await q("UPDATE anki_cards SET front=$1, back=$2 WHERE id=$3", [upd.display || w.display, formatCardBack({ ...w, ...upd }, w.display), c.id]);
           }
         }
         // Update sentence card back if it exists
@@ -380,7 +380,7 @@ const server = createServer(async (req, res) => {
             const normalizedWord = updatedWord.trim();
             const re = new RegExp(`\\b${normalizedWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
             newFront = newExample.replace(re, "____");
-          } else if (upd.example === "" || (upd.example !== undefined && !upd.example.trim())) {
+          } else if (upd.example === "" || (upd.example != null && !upd.example.trim())) {
             newFront = "";
           }
           const rawExample = newExample ?? "";
