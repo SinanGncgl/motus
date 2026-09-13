@@ -57,6 +57,7 @@ export default function Practice() {
   const [incorrectCount, setIncorrectCount] = useState(0);
 
   const [mode, setMode] = useState<PracticeMode>("flashcard");
+  const [cardType, setCardType] = useState<"word" | "sentence">("word");
   const [allWords] = useLocalWords();
   const [nextReviewInfo, setNextReviewInfo] = useState<string | null>(null);
 
@@ -139,6 +140,10 @@ export default function Practice() {
   useEffect(() => {
     setNextReviewInfo(null);
     setFlipped(false);
+    if (current) {
+      const isSentence = current.cardType === "sentence";
+      setCardType(isSentence ? "sentence" : "word");
+    }
   }, [current?.id]);
 
   // Auto-play pronunciation when a new card appears
@@ -327,6 +332,13 @@ export default function Practice() {
               className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-2xl border bg-card p-10 shadow-lg"
               style={{ backfaceVisibility: "hidden" }}
             >
+              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                cardType === "sentence" 
+                  ? "bg-blue-500/10 text-blue-500" 
+                  : "bg-purple-500/10 text-purple-500"
+              }`}>
+                {cardType === "sentence" ? "Sentence" : "Word"}
+              </span>
               {current.cardType === "sentence" ? (
                 <>
                   <Badge variant="outline" className="text-xs font-normal">
