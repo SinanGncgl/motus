@@ -83,10 +83,25 @@ CREATE TABLE IF NOT EXISTS anki_cards (
   card_type TEXT DEFAULT 'word',
   ease_factor REAL DEFAULT 2.5
 );
+CREATE TABLE IF NOT EXISTS review_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  card_id TEXT NOT NULL,
+  rating TEXT NOT NULL,
+  box_before INTEGER,
+  box_after INTEGER,
+  ease_before REAL,
+  ease_after REAL,
+  reviewed_at BIGINT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_sub_user ON subtitles(user_id);
 CREATE INDEX IF NOT EXISTS idx_word_user ON saved_words(user_id);
 CREATE INDEX IF NOT EXISTS idx_card_user ON anki_cards(user_id);
 CREATE INDEX IF NOT EXISTS idx_card_word ON anki_cards(saved_word_id);
+CREATE INDEX IF NOT EXISTS idx_review_logs_user_time
+  ON review_logs(user_id, reviewed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_review_logs_card
+  ON review_logs(card_id, reviewed_at DESC);
 `;
 
 const id = (p) => `${p}_${randomUUID()}`;
