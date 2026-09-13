@@ -1,9 +1,9 @@
-import { localApi, type LocalWord } from "@/lib/local-api";
+import { localApi, type LocalCard, type LocalWord } from "@/lib/local-api";
 import { settings } from "@/lib/settings";
 import { isCommonWord } from "@/lib/stopwords";
 import { toast } from "sonner";
 
-export type PracticeMode = "flashcard" | "cloze" | "dictation";
+export type PracticeMode = "flashcard" | "cloze" | "dictation" | "speed";
 
 export interface SaveWordInput {
   word: string; // normalized
@@ -72,6 +72,15 @@ export interface DictationItem {
   sentence: string;
 }
 
+export interface SpeedReviewItem {
+  cardId: string;
+  front: string;
+  back: string;
+  cardType: "word" | "sentence";
+  savedWordId?: string;
+  screenshotUrl?: string;
+}
+
 /** Build cloze items from saved words that have a usable example sentence. */
 export function buildClozeItems(words: LocalWord[], cards?: Array<{ id: string; _id?: string; front: string }>): ClozeItem[] {
   const cardByWord = new Map<string, string>();
@@ -115,6 +124,19 @@ export function buildDictationItems(words: LocalWord[], cards?: Array<{ id: stri
   return shuffle(items);
 }
 
+export function buildSpeedReviewItems(cards: LocalCard[]): SpeedReviewItem[] {
+  return cards
+    .filter((c) => c.front)
+    .map((c) => ({
+      cardId: c.id ?? c._id ?? "",
+      front: c.front,
+      back: c.back,
+      cardType: c.cardType ?? "word",
+      savedWordId: c.savedWordId,
+      screenshotUrl: c.screenshotUrl,
+    }));
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -134,19 +156,19 @@ function normalizeText(s: string): string {
 
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array<number>(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i]![0] = i;
+  for (let j = 0; j <= n; j++) dp[0]![j] = j;
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      dp[i]![j] = Math.min(
+        dp[i - 1]![j]! + 1,
+        dp[i]![j - 1]! + 1,
+        dp[i - 1]![j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1)
       );
     }
   }
-  return dp[m][n];
+  return dp[m]![n]!;
 }
 
 export function answerMatches(userInput: string, correctAnswer: string): { correct: boolean; distance?: number } {

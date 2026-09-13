@@ -14,6 +14,7 @@ import { useDueCards, useLocalWords } from "@/hooks/use-local-data";
 import { session, streak } from "@/lib/streak";
 import { localApi, type LocalCard, type LocalWord } from "@/lib/local-api";
 import { ClozePractice, DictationPractice } from "@/components/app/PracticeModes";
+import { SpeedReviewPractice } from "@/components/app/SpeedReviewPractice";
 import { speak } from "@/lib/tts";
 import type { PracticeMode } from "@/lib/study";
 import { motion } from "framer-motion";
@@ -76,7 +77,9 @@ export default function Practice() {
   // Fetch next due time when no cards are available
   useEffect(() => {
     if (due && due.length === 0 && againQueue.length === 0 && reviewed.size === 0) {
-      localApi.cards.nextDue().then((r) => setNextReviewInfo(formatNextDue(r.nextDue))).catch(() => {});
+      localApi.cards.nextDue().then((r) => {
+        if (r.nextDue != null) setNextReviewInfo(formatNextDue(r.nextDue));
+      }).catch(() => {});
     }
   }, [due, againQueue.length, reviewed.size]);
 
@@ -274,7 +277,7 @@ export default function Practice() {
         </Badge>
       </header>
       <div className="flex flex-wrap gap-2">
-        {(["flashcard", "cloze", "dictation"] as PracticeMode[]).map((m) => (
+        {(["flashcard", "cloze", "dictation", "speed"] as PracticeMode[]).map((m) => (
           <button
             key={m}
             type="button"
@@ -503,6 +506,16 @@ export default function Practice() {
           <p className="mt-2 text-center text-xs text-muted-foreground">{nextReviewInfo}</p>
         )}
       </div>
+      ) : mode === "speed" ? (
+        <div className="mx-auto w-full max-w-2xl">
+          <SpeedReviewPractice
+            cards={due}
+            onComplete={(stats) => {
+              setCorrectCount((c) => c + stats.correct);
+              setIncorrectCount((c) => c + stats.incorrect);
+            }}
+          />
+        </div>
       ) : (
         <div className="mx-auto w-full max-w-2xl">
           {mode === "cloze" ? (
