@@ -443,7 +443,8 @@ const server = createServer(async (req, res) => {
         return true;
       });
       return send(res, 200, filtered.map((c) => {
-        const back = formatCardBack(
+        const rawExample = c.card_type === "sentence" ? (c.example ? `${c.example}\n\n` : "") : "";
+        const back = rawExample + formatCardBack(
           { definition: c.definition, example: c.example, translation: c.translation, sourceTitle: c.source_title },
           c.front,
           c.card_type || "word"
