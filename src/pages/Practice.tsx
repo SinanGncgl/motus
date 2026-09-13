@@ -58,7 +58,6 @@ export default function Practice() {
 
   const [mode, setMode] = useState<PracticeMode>("flashcard");
   const [allWords] = useLocalWords();
-  const [nextDueMs, setNextDueMs] = useState<number | null>(null);
   const [nextReviewInfo, setNextReviewInfo] = useState<string | null>(null);
 
   const queue = useMemo(() => {
@@ -77,7 +76,7 @@ export default function Practice() {
   // Fetch next due time when no cards are available
   useEffect(() => {
     if (due && due.length === 0 && againQueue.length === 0 && reviewed.size === 0) {
-      localApi.cards.nextDue().then((r) => setNextDueMs(r.nextDue)).catch(() => {});
+      localApi.cards.nextDue().then((r) => setNextReviewInfo(formatNextDue(r.nextDue))).catch(() => {});
     }
   }, [due, againQueue.length, reviewed.size]);
 
@@ -92,13 +91,7 @@ export default function Practice() {
     try {
       const result = await localApi.cards.rate(current.id ?? current._id ?? "", rating);
       if (result.nextDue) {
-        const diff = result.nextDue - Date.now();
-        const mins = Math.floor(diff / 60000);
-        const hours = Math.floor(mins / 60);
-        const days = Math.floor(hours / 24);
-        if (days > 0) setNextReviewInfo(`Next review: ${days} day${days > 1 ? "s" : ""}`);
-        else if (hours > 0) setNextReviewInfo(`Next review: ${hours}h`);
-        else setNextReviewInfo(`Next review: ${mins} min`);
+        setNextReviewInfo(`Next review: ${formatNextDue(result.nextDue)}`);
       }
       await refreshDue();
       setReviewed((prev) => {
@@ -199,8 +192,8 @@ export default function Practice() {
             <EmptyTitle>All caught up</EmptyTitle>
             <EmptyDescription>
               Every card is scheduled.{" "}
-              {nextDueMs
-                ? `Next review ${formatNextDue(nextDueMs)}. `
+              {nextReviewInfo
+                ? `${nextReviewInfo}. `
                 : ""}
               Save more words from subtitles to grow your deck.
             </EmptyDescription>
