@@ -217,6 +217,7 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
   const [idx, setIdx] = useState(0);
   const [answer, setAnswer] = useState("");
   const [revealed, setRevealed] = useState(false);
+  const [matchResult, setMatchResult] = useState<{ correct: boolean; distance?: number } | null>(null);
   const [done, setDone] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [incorrect, setIncorrect] = useState(0);
@@ -232,6 +233,7 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
     setIdx(0);
     setAnswer("");
     setRevealed(false);
+    setMatchResult(null);
     setDone(0);
     setCorrect(0);
     setIncorrect(0);
@@ -289,11 +291,12 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
           onChange={(e) => setAnswer(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !revealed) {
-              const ok = answerMatches(answer, current.sentence).correct;
+              const result = answerMatches(answer, current.sentence);
+              setMatchResult(result);
               setRevealed(true);
-              onResult?.(ok);
-              onRate?.(current.cardId, ok ? "good" : "again");
-              if (ok) setCorrect((c) => c + 1);
+              onResult?.(result.correct);
+              onRate?.(current.cardId, result.correct ? "good" : "again");
+              if (result.correct) setCorrect((c) => c + 1);
               else setIncorrect((c) => c + 1);
             }
           }}
@@ -304,7 +307,7 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
           <div className="mt-4 rounded-lg bg-muted/50 p-3 text-sm">
             <p className="font-medium text-foreground">{current.sentence}</p>
             <p className="mt-1 text-muted-foreground">
-              {answerMatches(answer, current.sentence).correct
+              {matchResult?.correct
                 ? "✓ Matches — nice listening!"
                 : "Compare your typing above with the original."}
             </p>
@@ -316,11 +319,12 @@ export function DictationPractice({ words, cards, onResult, onRate }: {
             className="cursor-pointer"
             onClick={() => {
               if (revealed) return;
-              const ok = answerMatches(answer, current.sentence).correct;
+              const result = answerMatches(answer, current.sentence);
+              setMatchResult(result);
               setRevealed(true);
-              onResult?.(ok);
-              onRate?.(current.cardId, ok ? "good" : "again");
-              if (ok) setCorrect((c) => c + 1);
+              onResult?.(result.correct);
+              onRate?.(current.cardId, result.correct ? "good" : "again");
+              if (result.correct) setCorrect((c) => c + 1);
               else setIncorrect((c) => c + 1);
             }}
           >

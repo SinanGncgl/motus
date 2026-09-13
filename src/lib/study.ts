@@ -129,7 +129,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 function normalizeText(s: string): string {
-  return s.trim().toLowerCase().replace(/[.,!?;:'"]/g, "");
+  return s.trim().toLowerCase().replace(/[-–—().,!?;:'"]/g, "");
 }
 
 function levenshtein(a: string, b: string): number {
@@ -149,7 +149,7 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n];
 }
 
-export function answerMatches(userInput: string, correctAnswer: string, mode?: string): { correct: boolean; distance?: number } {
+export function answerMatches(userInput: string, correctAnswer: string): { correct: boolean; distance?: number } {
   const normalizedInput = normalizeText(userInput);
   const normalizedAnswer = normalizeText(correctAnswer);
 
@@ -160,9 +160,11 @@ export function answerMatches(userInput: string, correctAnswer: string, mode?: s
   const distance = levenshtein(normalizedInput, normalizedAnswer);
   if (distance <= 2) return { correct: true, distance };
 
-  // Partial match: user answer is contained in correct answer or vice versa
-  if (normalizedAnswer.includes(normalizedInput) || normalizedInput.includes(normalizedAnswer)) {
-    return { correct: true, distance };
+  // Partial match: only if lengths are similar (within 2 chars)
+  if (Math.abs(normalizedInput.length - normalizedAnswer.length) <= 2) {
+    if (normalizedAnswer.includes(normalizedInput) || normalizedInput.includes(normalizedAnswer)) {
+      return { correct: true, distance };
+    }
   }
 
   return { correct: false, distance };
