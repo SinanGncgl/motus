@@ -20,6 +20,7 @@ const Practice = lazy(() => import("./pages/Practice.tsx"));
 const Watch = lazy(() => import("./pages/Watch.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const Settings = lazy(() => import("./pages/Settings.tsx"));
+const Stats = lazy(() => import("./pages/Stats.tsx"));
 
 function RouteLoading() {
   return <div className="flex min-h-screen items-center justify-center bg-background"><div className="animate-pulse text-muted-foreground">Loading…</div></div>;
@@ -44,6 +45,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/practice" element={<LocalRoute><Practice /></LocalRoute>} />
             <Route path="/watch/:subtitleId" element={<LocalRoute><Watch /></LocalRoute>} />
             <Route path="/settings" element={<LocalRoute><Settings /></LocalRoute>} />
+            <Route path="/stats" element={<LocalRoute><Stats /></LocalRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
