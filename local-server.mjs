@@ -539,6 +539,12 @@ const server = createServer(async (req, res) => {
         "UPDATE anki_cards SET box=$1, due_at=$2, last_reviewed_at=$3, leech_count=$4, ease_factor=$5 WHERE id=$6",
         [newBox, dueAt, now(), leechCount, newEase, c.id]
       );
+      // Log the review event
+      const logId = `rl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await q(
+        "INSERT INTO review_logs(id, user_id, card_id, rating, box_before, box_after, ease_before, ease_after, reviewed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        [logId, uid, a.cardId, a.rating, c.box, newBox, ease, newEase, Date.now()]
+      );
       return send(res, 200, { ok: true, leech: leechCount >= 3, nextDue: dueAt, intervalMs });
     }
 
