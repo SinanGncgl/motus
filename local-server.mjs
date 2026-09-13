@@ -371,6 +371,7 @@ const server = createServer(async (req, res) => {
         // Update sentence card back if it exists
         const sc = await q1("SELECT id, front FROM anki_cards WHERE saved_word_id = $1 AND card_type = 'sentence'", [p[2]]);
         if (sc) {
+          const mergedWord = { ...w, ...upd };
           const updatedWord = upd.display || w.display;
           // Update front if example changed
           let newFront = sc.front;
@@ -379,9 +380,11 @@ const server = createServer(async (req, res) => {
             const normalizedWord = updatedWord.trim();
             const re = new RegExp(`\\b${normalizedWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
             newFront = newExample.replace(re, "____");
+          } else if (upd.example === "" || (upd.example !== undefined && !upd.example.trim())) {
+            newFront = "";
           }
           const rawExample = newExample ?? "";
-          const newBack = `${rawExample}\n\n${formatCardBack(upd, updatedWord)}`;
+          const newBack = `${rawExample}\n\n${formatCardBack(mergedWord, updatedWord)}`;
           await q("UPDATE anki_cards SET front = $1, back = $2 WHERE id = $3", [newFront, newBack, sc.id]);
         }
         return send(res, 200, { ok: true });
