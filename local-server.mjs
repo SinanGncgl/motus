@@ -490,9 +490,9 @@ const server = createServer(async (req, res) => {
       if (inLearning) {
         switch (a.rating) {
           case "again":
-            newBox = 0; intervalMs = LEARNING_STEP; newEase = Math.max(ease - 0.2, 1.3); break;
-          case "hard":
             newBox = 0; intervalMs = LEARNING_STEP; newEase = Math.max(ease - 0.15, 1.3); break;
+          case "hard":
+            newBox = 0; intervalMs = LEARNING_STEP * 6; newEase = Math.max(ease - 0.1, 1.3); break; // 60 min
           case "good":
             newBox = 1; intervalMs = DAY; break;
           case "easy":
