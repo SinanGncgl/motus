@@ -15,8 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { localApi } from "@/lib/local-api";
 import { offlineLookup } from "@/lib/offline-dictionary";
 import { saveWord } from "@/lib/study";
-import { BookmarkCheck, Loader2, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { BookmarkCheck, ExternalLink, ImagePlus, Loader2, Sparkles, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 export interface WordSelection {
@@ -45,10 +45,6 @@ interface Props {
   selection: WordSelection | null;
   existing?: SavedWordEntry | null;
   onSaved?: () => void;
-  videoRef?: React.RefObject<{
-    getCurrentTime: () => number;
-    getInternalPlayer: () => HTMLVideoElement | null;
-  } | null>;
 }
 
 export function WordDialog({
@@ -57,7 +53,6 @@ export function WordDialog({
   selection,
   existing,
   onSaved,
-  videoRef,
 }: Props) {
   const [definition, setDefinition] = useState("");
   const [example, setExample] = useState("");
@@ -71,6 +66,7 @@ export function WordDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [screenshot, setScreenshot] = useState<Blob | null>(null);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open || !selection) return;
@@ -85,34 +81,6 @@ export function WordDialog({
       URL.revokeObjectURL(screenshotUrl);
     }
     setScreenshotUrl(null);
-
-    // Auto-capture video frame
-    if (videoRef?.current) {
-      try {
-        const player = videoRef.current.getInternalPlayer?.();
-        if (player && player.videoWidth > 0) {
-          const canvas = document.createElement("canvas");
-          canvas.width = player.videoWidth;
-          canvas.height = player.videoHeight;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.drawImage(player, 0, 0);
-            canvas.toBlob(
-              (blob) => {
-                if (blob) {
-                  setScreenshot(blob);
-                  setScreenshotUrl(URL.createObjectURL(blob));
-                }
-              },
-              "image/jpeg",
-              0.85,
-            );
-          }
-        }
-      } catch {
-        // Video frame capture is best-effort
-      }
-    }
 
     // Pre-fill definition with sentence translation if no existing definition
     if (!existing?.definition && selection.translation) {
@@ -159,13 +127,28 @@ export function WordDialog({
     return () => {
       cancelled2 = true;
     };
-  }, [open, selection, existing, videoRef]);
+  }, [open, selection, existing]);
 
   useEffect(() => {
     return () => {
       if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
     };
   }, [screenshotUrl]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
+    const blob = new Blob([await file.arrayBuffer()], { type: file.type });
+    setScreenshot(blob);
+    setScreenshotUrl(URL.createObjectURL(blob));
+    // Reset input so the same file can be re-selected
+    e.target.value = "";
+  };
 
   const save = async () => {
     if (!selection) return;
@@ -232,17 +215,6 @@ export function WordDialog({
                 label="Pronounce word"
               />
             )}
-            {screenshotUrl && (
-              <img
-                src={screenshotUrl}
-                alt="Screenshot"
-                className="ml-auto h-[68px] w-[120px] rounded-md border object-cover cursor-pointer"
-                onClick={() =>
-                  screenshotUrl && window.open(screenshotUrl, "_blank")
-                }
-                title="Click to view full size"
-              />
-            )}
           </DialogTitle>
           <DialogDescription>
             {existing
@@ -282,6 +254,16 @@ export function WordDialog({
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <Label htmlFor="word-definition">Definition</Label>
+              {displayWord && (
+                <a
+                  href={`https://www.dict.cc/?s=${encodeURIComponent(displayWord)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <ExternalLink className="size-3" /> dict.cc
+                </a>
+              )}
               {isLookingUp && (
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Loader2 className="size-3 animate-spin" />
@@ -323,6 +305,49 @@ export function WordDialog({
               onChange={(e) => setExample(e.target.value)}
               className="min-h-16 resize-none"
             />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Image</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => void handleFileUpload(e)}
+            />
+            {screenshotUrl ? (
+              <div className="relative inline-block w-fit">
+                <img
+                  src={screenshotUrl}
+                  alt="Uploaded image"
+                  className="h-[68px] w-[120px] rounded-md border object-cover cursor-pointer"
+                  onClick={() => screenshotUrl && window.open(screenshotUrl, "_blank")}
+                  title="Click to view full size"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
+                    setScreenshot(null);
+                    setScreenshotUrl(null);
+                  }}
+                  className="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:opacity-90"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-fit gap-1.5 text-xs"
+              >
+                <ImagePlus className="size-3" />
+                Upload image
+              </Button>
+            )}
           </div>
         </div>
         <DialogFooter>
