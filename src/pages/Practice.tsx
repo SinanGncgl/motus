@@ -270,7 +270,7 @@ export default function Practice() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex h-[calc(100vh-2rem)] flex-col gap-3 overflow-hidden px-4 py-2">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Practice</h1>
@@ -335,10 +335,10 @@ export default function Practice() {
       )}
 
       {mode === "flashcard" ? (
-      <div className="mx-auto w-full max-w-xl">
+      <div className="mx-auto w-full max-w-3xl flex-1">
         {/* Flashcard */}
         <div
-          className="relative cursor-pointer select-none"
+          className="relative h-full cursor-pointer select-none"
           style={{ perspective: "1200px" }}
           onClick={() => setFlipped((f) => !f)}
         >
@@ -346,11 +346,11 @@ export default function Practice() {
             animate={{ rotateY: flipped ? 180 : 0 }}
             transition={{ duration: 0.4, ease: "easeInOut" }}
             style={{ transformStyle: "preserve-3d" }}
-            className="relative min-h-[340px] w-full"
+            className="relative h-full w-full"
           >
             {/* Front */}
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-2xl border bg-card p-10 shadow-lg"
+              className="absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-y-auto rounded-2xl border bg-card p-10 shadow-lg"
               style={{ backfaceVisibility: "hidden" }}
             >
               <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -365,7 +365,7 @@ export default function Practice() {
                   <Badge variant="outline" className="text-xs font-normal">
                     Fill in the blank
                   </Badge>
-                  <p className="text-center text-2xl leading-8 text-foreground/90">
+                  <p className="text-center text-3xl leading-9 text-foreground/90">
                     {current.front}
                   </p>
                 </>
@@ -379,25 +379,18 @@ export default function Practice() {
                     lang={current.language || "de"}
                     label="Pronounce"
                   />
-                  {current.screenshotUrl && (
-                    <img
-                      src={current.screenshotUrl}
-                      alt=""
-                      className="w-full max-h-32 rounded-lg object-cover"
-                    />
-                  )}
-                  <p className="text-center text-4xl font-semibold tracking-tight">
+                  <p className="text-center text-5xl font-semibold tracking-tight">
                     {current.front}
                   </p>
                 </>
               )}
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Click to reveal the answer
               </p>
             </div>
             {/* Back */}
             <div
-              className="absolute inset-0 flex flex-col justify-center gap-5 rounded-2xl border bg-card p-10 shadow-lg"
+              className="absolute inset-0 flex flex-col justify-center gap-5 overflow-y-auto rounded-2xl border bg-card p-10 shadow-lg"
               style={{
                 backfaceVisibility: "hidden",
                 transform: "rotateY(180deg)",
@@ -405,7 +398,7 @@ export default function Practice() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <p className="text-xl font-semibold tracking-tight">
+                  <p className="text-2xl font-semibold tracking-tight">
                     {current.front}
                   </p>
                    {(current.cardType ?? "word") === "word" && (
@@ -432,11 +425,11 @@ export default function Practice() {
                   <img
                     src={current.screenshotUrl}
                     alt=""
-                    className="w-full max-h-48 rounded-lg object-cover"
+                    className="w-full rounded-lg object-contain"
                   />
                 )}
                 {current.back && (
-                  <p className="whitespace-pre-wrap text-[15px] leading-7 text-foreground/90">
+                  <p className="whitespace-pre-wrap text-lg leading-8 text-foreground/90">
                     {current.back}
                   </p>
                 )}

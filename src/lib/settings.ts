@@ -20,8 +20,8 @@ export interface AppSettings {
   translationApiKey: string;
   /** Optional LibreTranslate-compatible endpoint for sentence translation. */
   translationEndpoint: string;
-  /** Translation service to use: "libretranslate" or "deepl". */
-  translationService: "libretranslate" | "deepl";
+  /** Translation service to use: "google", "libretranslate", or "deepl". */
+  translationService: "google" | "libretranslate" | "deepl";
 }
 
 const KEY = "motus.settings.v1";
@@ -31,12 +31,12 @@ const DEFAULTS: AppSettings = {
   dailyGoal: 20,
   newCardsPerDay: 10,
   autoPausePerLine: false,
-  autoTranslateCaptions: false,
+  autoTranslateCaptions: true,
   sourceLanguage: "auto",
-  nativeLanguage: "en",
+  nativeLanguage: "en-GB",
   translationApiKey: "",
   translationEndpoint: "",
-  translationService: "libretranslate",
+  translationService: "google",
 };
 
 function read(): AppSettings {

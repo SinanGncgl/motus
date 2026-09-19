@@ -1,5 +1,6 @@
 import { FilePlayer } from "@/components/app/FilePlayer";
 import { SpeakerButton } from "@/components/app/SpeakerButton";
+import { TranscribeCompare } from "@/components/app/TranscribeCompare";
 import { TranscriptPanel } from "@/components/app/TranscriptPanel";
 import { VideoControls } from "@/components/app/VideoControls";
 import {
@@ -37,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { localApi, type LocalSubtitle } from "@/lib/local-api";
+import { localApi, type LocalLine, type LocalSubtitle } from "@/lib/local-api";
 import { settings } from "@/lib/settings";
 import { tokenize } from "@/lib/subtitles";
 import {
@@ -49,7 +50,7 @@ import {
 import { LANGUAGES, languageLabel } from "@/lib/tts";
 import { useSavedWords } from "@/hooks/use-saved-words";
 import { cn } from "@/lib/utils";
-import { captureFrame, captureScreenCrop, type PlayerHandle } from "@/lib/player";
+import { captureFrame, type PlayerHandle } from "@/lib/player";
 import {
   copyToClipboard,
   detectLocalGrabber,
@@ -71,13 +72,14 @@ import {
   Play,
   Volume2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
 const GRAB_STAGE_LABELS: Record<TranscribeProgress["stage"], string> = {
+  grabbing: "Grabbing audio from YouTube…",
   decoding: "Reading audio…",
-  downloading: "Downloading speech model…",
+  downloading: "Downloading audio…",
   loading: "Preparing…",
   transcribing: "Transcribing… (this can take a moment)",
 };
@@ -85,21 +87,21 @@ const GRAB_STAGE_LABELS: Record<TranscribeProgress["stage"], string> = {
 type LearnMode = "watch" | "learn" | "listen" | "practice";
 
 const SHORTCUTS: [string, string][] = [
-  ["Space / K", "Play / pause"],
-  ["←", "Previous sentence"],
-  ["→", "Next sentence"],
-  ["Home / 0", "Jump to start of current sentence"],
-  ["R", "Replay current sentence (seek + play)"],
-  ["S", "Save current sentence"],
-  ["T", "Show / hide translation"],
-  ["C", "Show / hide captions"],
-  ["F", "Focus mode (hide chrome)"],
+  ["Space", "Play / pause"],
+  ["←  /  →", "Previous / next sentence"],
+  ["↑  /  ↓", "Volume up / down"],
+  ["M", "Mute / unmute"],
+  ["R", "Replay sentence"],
+  ["S", "Save word"],
+  ["T", "Translate sentence"],
+  ["C", "Toggle captions"],
+  ["A / B", "Set loop start / end"],
+  ["1 / 2 / 3", "Speed: 0.75× / 1× / 1.25×"],
+  ["L", "Cycle mode"],
+  ["F", "Focus mode"],
   ["X", "Copy sentence + translation"],
-  ["A / B", "Set A–B loop start / end"],
-  ["L", "Cycle learning mode"],
-  ["1 / 2 / 3", "0.75× / 1× / 1.25×"],
-  ["?", "Toggle this help"],
-  ["Esc", "Close popovers"],
+  ["Home", "Jump to start of sentence"],
+  ["?", "Keyboard shortcuts"],
 ];
 
 function TranscriptSkeleton({ lines = 15 }: { lines?: number }) {
@@ -165,6 +167,10 @@ function WatchContent({ id }: { id: string }) {
   const [focusMode, setFocusMode] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(true);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [leftPanelPct, setLeftPanelPct] = useState(40);
+  const dragRef = useRef<{ startX: number; startPct: number } | null>(null);
 
   // Per-line English translations (cached). Populated lazily.
   const [translations, setTranslations] = useState<Record<number, string>>({});
@@ -196,9 +202,14 @@ function WatchContent({ id }: { id: string }) {
   // Attach-video form
   const [attachMode, setAttachMode] = useState<"youtube" | "file">("youtube");
   const [attachUrl, setAttachUrl] = useState("");
-  const [attachLang, setAttachLang] = useState("en-US");
+  const [attachLang, setAttachLang] = useState(
+    () => {
+      const src = settings.get().sourceLanguage;
+      return src && src !== "auto" ? src : "en-US";
+    },
+  );
   const [attachModel, setAttachModel] = useState<TranscribeModel>("best");
-  const [transcribeMode, setTranscribeMode] = useState<"auto" | "youtube" | "whisper">("auto");
+  const [transcribeMode, setTranscribeMode] = useState<"auto" | "youtube" | "whisper" | "compare">("auto");
   const [isAttaching, setIsAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [attachErrorCode, setAttachErrorCode] = useState<string | null>(null);
@@ -207,6 +218,12 @@ function WatchContent({ id }: { id: string }) {
   const [grabProgress, setGrabProgress] = useState<TranscribeProgress | null>(
     null,
   );
+
+  // Comparison mode state
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareYoutube, setCompareYoutube] = useState<LocalLine[] | null>(null);
+  const [compareWhisper, setCompareWhisper] = useState<LocalLine[] | null>(null);
+  const [compareVideoId, setCompareVideoId] = useState<string | null>(null);
 
   const savedByWord = useMemo(() => {
     const map = new Map<string, (typeof savedWords)[number]>();
@@ -228,13 +245,21 @@ function WatchContent({ id }: { id: string }) {
   const activeRow = useMemo(() => {
     if (!hasTimestamps) return null;
     const lines = subtitle?.lines ?? [];
+    if (lines.length === 0) return null;
+
+    // YouTube auto-captions have generous end times that extend past when
+    // the audio actually moves on. Instead of checking time < line.end
+    // (which keeps old lines active too long), find the last line whose
+    // start time is at or before the current playback position.
+    let result: number | null = null;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (line && line.start !== undefined && time >= line.start) {
-        if (line.end === undefined || time < line.end) return i;
+        result = i;
       }
     }
-    if (lines.length > 0 && time < (lines[0]?.start ?? 0)) return 0;
+    if (result !== null) return result;
+    if (time < (lines[0]?.start ?? 0)) return 0;
     return null;
   }, [time, subtitle, hasTimestamps]);
 
@@ -263,8 +288,7 @@ function WatchContent({ id }: { id: string }) {
     const container = transcriptRef.current;
     const el = container?.querySelector(`[data-line="${activeRow}"]`);
     if (container && el instanceof HTMLElement) {
-      const top =
-        el.offsetTop - container.clientHeight / 2 + el.clientHeight / 2;
+      const top = el.offsetTop - 48;
       container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
     }
   }, [activeRow, transcriptOpen]);
@@ -275,10 +299,11 @@ function WatchContent({ id }: { id: string }) {
   const translateRow = (row: number) => {
     const line = subtitle?.lines[row];
     if (!line) return;
-    if (translations[row] !== undefined || translatingRows.has(row)) return;
+    // Allow retrying failed translations, but skip if already translating or succeeded
+    if ((translations[row] !== undefined && translations[row] !== "__failed__") || translatingRows.has(row)) return;
     const target = translateTarget.slice(0, 2);
     const userSource = settings.get().sourceLanguage;
-    const source = userSource !== "auto" ? userSource : (subtitle?.language?.slice(0, 2) || "auto");
+    const source = userSource !== "auto" ? userSource.slice(0, 2) : (subtitle?.language?.slice(0, 2) || "auto");
 
     setTranslatingRows((prev) => new Set(prev).add(row));
     translateLine(line.text, target, source)
@@ -323,6 +348,74 @@ function WatchContent({ id }: { id: string }) {
       }
     }
   }, [playbackRate, playerReady]);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startPct: leftPanelPct };
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const container = (e.target as HTMLElement).parentElement;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const dx = ev.clientX - dragRef.current.startX;
+      const newPct = dragRef.current.startPct + (dx / rect.width) * 100;
+      setLeftPanelPct(Math.min(75, Math.max(20, newPct)));
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [leftPanelPct]);
+
+  const handleSetVolume = (newVolume: number) => {
+    setVolume(newVolume);
+    if (playerRef.current?.setVolume) {
+      try {
+        playerRef.current.setVolume(newVolume);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (newVolume > 0 && isMuted) {
+      setIsMuted(false);
+      if (playerRef.current?.unmute) {
+        try {
+          playerRef.current.unmute();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  };
+
+  const handleToggleMute = () => {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    if (newMuted) {
+      if (playerRef.current?.mute) {
+        try {
+          playerRef.current.mute();
+        } catch {
+          /* ignore */
+        }
+      }
+    } else {
+      if (playerRef.current?.unmute) {
+        try {
+          playerRef.current.unmute();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  };
 
   // Auto-pause at the end of the active caption line.
   const autoPausePerLine = settings.get().autoPausePerLine;
@@ -407,13 +500,19 @@ function WatchContent({ id }: { id: string }) {
   const saveWordFromToken = async (tokenWord: string, raw: string, lineText: string) => {
     playerRef.current?.pauseVideo();
     if (!subtitle) return;
-    let screenshot = await captureFrame(playerRef);
-    // For YouTube videos, captureFrame returns null (CORS). Use screen capture.
-    if (!screenshot && subtitle.videoId && videoContainerRef.current) {
-      screenshot = await captureScreenCrop(videoContainerRef.current);
+    const screenshot = await captureFrame(playerRef);
+    // For German, fetch the base/infinitive form
+    let wordToSave = tokenWord;
+    if (subtitle.language === "de") {
+      try {
+        const lookup = await localApi.dictionaryDe(tokenWord);
+        if (lookup?.baseForm && lookup.baseForm !== tokenWord) {
+          wordToSave = lookup.baseForm;
+        }
+      } catch {}
     }
     await save({
-      word: tokenWord,
+      word: wordToSave,
       display: raw,
       example: lineText,
       sourceTitle: subtitle.title,
@@ -424,7 +523,7 @@ function WatchContent({ id }: { id: string }) {
       action: {
         label: "Undo",
         onClick: async () => {
-          const existingEntry = existing(tokenWord);
+          const existingEntry = existing(wordToSave);
           if (existingEntry?._id) {
             await remove(existingEntry._id);
             toast.info(`Removed "${raw}"`);
@@ -487,11 +586,7 @@ function WatchContent({ id }: { id: string }) {
 
   const saveCurrentSentence = async () => {
     if (!activeLine || !subtitle) return;
-    let screenshot = await captureFrame(playerRef);
-    // For YouTube videos, use screen capture
-    if (!screenshot && subtitle.videoId && videoContainerRef.current) {
-      screenshot = await captureScreenCrop(videoContainerRef.current);
-    }
+    const screenshot = await captureFrame(playerRef);
     let count = 0;
     for (const token of tokenize(activeLine.text)) {
       if (!token.word) continue;
@@ -560,6 +655,14 @@ function WatchContent({ id }: { id: string }) {
           e.preventDefault();
           goToPrevLine();
           break;
+        case "ArrowUp":
+          e.preventDefault();
+          handleSetVolume(Math.min(1, volume + 0.1));
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          handleSetVolume(Math.max(0, volume - 0.1));
+          break;
         case "r":
         case "R":
           replayLine();
@@ -575,6 +678,11 @@ function WatchContent({ id }: { id: string }) {
         case "l":
         case "L":
           cycleMode();
+          break;
+        case "m":
+        case "M":
+          e.preventDefault();
+          handleToggleMute();
           break;
         case "1":
           setPlaybackRate(0.75);
@@ -695,6 +803,41 @@ function WatchContent({ id }: { id: string }) {
     setAttachErrorCode(null);
     setGrabProgress(null);
     try {
+      // COMPARE mode: fetch both YouTube captions and Whisper, then show comparison
+      if (transcribeMode === "compare") {
+        setGrabProgress({ stage: "transcribing", note: "Fetching YouTube captions…" });
+        let youtubeLines: LocalLine[] = [];
+        try {
+          const ytCaptions = await localApi.transcript(videoId, attachLang);
+          if (ytCaptions.lines && ytCaptions.lines.length > 0) {
+            youtubeLines = ytCaptions.lines;
+          }
+        } catch { /* no YouTube captions */ }
+
+        setGrabProgress({ stage: "downloading", percent: 0, note: "Downloading audio for Whisper…" });
+        const file = await grabYouTubeAudioStream(attachUrl, setGrabProgress, attachLang);
+        setGrabProgress({ stage: "decoding" });
+        const whisperResult = await transcribeFile(file, {
+          language: attachLang,
+          model: attachModel,
+          onProgress: setGrabProgress,
+        });
+
+        if (youtubeLines.length === 0 && whisperResult.lines.length === 0) {
+          setAttachError("No captions available and Whisper couldn't detect any speech.");
+          return;
+        }
+
+        // Store both and open comparison modal
+        setCompareYoutube(youtubeLines);
+        setCompareWhisper(whisperResult.lines);
+        setCompareVideoId(videoId);
+        setCompareOpen(true);
+        setAttachUrl("");
+        setIsAttaching(false);
+        return;
+      }
+
       // Step 1: Try YouTube's built-in captions (unless user chose Whisper-only)
       if (transcribeMode !== "whisper") {
         setGrabProgress({ stage: "transcribing", note: "Checking for YouTube captions…" });
@@ -707,7 +850,7 @@ function WatchContent({ id }: { id: string }) {
 
       // Step 2: No YouTube captions — download audio and transcribe with Whisper
       setGrabProgress(null);
-      const file = await grabYouTubeAudioStream(attachUrl, setGrabProgress);
+      const file = await grabYouTubeAudioStream(attachUrl, setGrabProgress, attachLang);
       setGrabProgress({ stage: "decoding" });
       const result = await transcribeFile(file, {
         language: attachLang,
@@ -744,6 +887,31 @@ function WatchContent({ id }: { id: string }) {
     }
   };
 
+  const handleCompareSelect = async (lines: LocalLine[], source: "youtube" | "whisper") => {
+    if (!subtitle || !compareVideoId) return;
+    try {
+      await localApi.subtitles.update(subtitle._id, {
+        videoId: compareVideoId,
+        language: attachLang,
+        lines,
+      });
+      setCompareOpen(false);
+      setCompareYoutube(null);
+      setCompareWhisper(null);
+      setCompareVideoId(null);
+      toast.success(
+        `${source === "youtube" ? "YouTube captions" : "Whisper transcription"} selected (${lines.length} lines)`,
+      );
+      // Refresh subtitle data
+      const updated = await localApi.subtitles.get(subtitle._id);
+      if (updated) {
+        setSubtitle(updated);
+      }
+    } catch {
+      toast.error("Failed to save transcription");
+    }
+  };
+
   const handleGrabAndTranscribe = async () => {
     if (!subtitle || !attachUrl.trim()) return;
     setAttachError(null);
@@ -765,7 +933,7 @@ function WatchContent({ id }: { id: string }) {
 
       // Step 2: Download audio and transcribe with Whisper
       setGrabProgress(null);
-      const file = await grabYouTubeAudioStream(attachUrl, setGrabProgress);
+      const file = await grabYouTubeAudioStream(attachUrl, setGrabProgress, attachLang);
       const result = await transcribeFile(file, {
         language: attachLang,
         model: attachModel,
@@ -907,12 +1075,12 @@ function WatchContent({ id }: { id: string }) {
         <div
           className={
             focusMode
-              ? "mx-auto flex w-full max-w-4xl flex-col gap-3"
-              : "flex flex-col gap-5"
+              ? "mx-auto flex h-[calc(100vh-4rem)] w-full flex-col gap-3"
+              : "flex h-[calc(100vh-4rem)] flex-col gap-3 lg:flex-row lg:gap-0"
           }
         >
           {/* VIDEO */}
-          <section className="flex min-w-0 flex-col gap-3">
+          <section className="flex min-w-0 shrink-0 flex-col gap-3 overflow-hidden lg:flex-col" style={{ width: focusMode ? "100%" : undefined, flex: focusMode ? undefined : `0 0 ${leftPanelPct}%` }}>
             {hasMedia ? (
               <>
                 <div ref={videoContainerRef} className="relative aspect-video w-full overflow-hidden rounded-2xl border bg-black shadow-lg">
@@ -935,6 +1103,20 @@ function WatchContent({ id }: { id: string }) {
                       className="h-full w-full"
                     />
                   )}
+
+                  {/* Click-to-play overlay (iframe has pointer-events:none so words are clickable) */}
+                  {playerReady && (
+                    <button
+                      type="button"
+                      className="absolute inset-0 z-20 cursor-pointer"
+                      aria-label={playing ? "Pause" : "Play"}
+                      onClick={() => {
+                        if (playing) playerRef.current?.pauseVideo();
+                        else playerRef.current?.playVideo();
+                      }}
+                    />
+                  )}
+
                   {!playerReady && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black">
                       <Loader2 className="size-5 animate-spin text-white/60" />
@@ -943,7 +1125,7 @@ function WatchContent({ id }: { id: string }) {
 
                   {/* Netflix-style captions overlay (visible in all modes) */}
                   {showCaptions && activeLine && (
-                    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center px-4">
+                    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-50 flex justify-center px-4">
                       <div className="pointer-events-auto max-w-[92%] rounded-xl bg-black/70 px-4 py-2.5 shadow-lg backdrop-blur-sm">
                         <div className="flex items-start gap-2">
                           <p className="text-lg font-medium leading-7 text-white">
@@ -1049,10 +1231,13 @@ function WatchContent({ id }: { id: string }) {
                   loopB={loopB}
                   focusMode={focusMode}
                   practiceHide={practiceHide}
+                  volume={volume}
+                  isMuted={isMuted}
                   onPrevLine={goToPrevLine}
                   onNextLine={goToNextLine}
                   onReplay={replayLine}
                   onSeekToStart={seekToCurrentStart}
+                  onSeek={(t) => playerRef.current?.seekTo(t)}
                   onSetPlaybackRate={setPlaybackRate}
                   onSetMode={setMode}
                   onToggleCaptions={() => setShowCaptions((v) => !v)}
@@ -1075,6 +1260,8 @@ function WatchContent({ id }: { id: string }) {
                         if (t.word) all.add(t.word);
                     setRevealedWords(all);
                   }}
+                  onSetVolume={handleSetVolume}
+                  onToggleMute={handleToggleMute}
                 />
               </>
             ) : (
@@ -1108,6 +1295,35 @@ function WatchContent({ id }: { id: string }) {
                       ))}
                     </SelectContent>
                   </Select>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Source:</Label>
+                    <Select value={transcribeMode} onValueChange={(v) => setTranscribeMode(v as typeof transcribeMode)}>
+                      <SelectTrigger className="h-8 w-auto text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Auto (captions first)</SelectItem>
+                        <SelectItem value="youtube">YouTube captions only</SelectItem>
+                        <SelectItem value="whisper">Whisper only</SelectItem>
+                        <SelectItem value="compare">Compare (YouTube + Whisper)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {transcribeMode !== "youtube" && (
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs text-muted-foreground whitespace-nowrap">Model:</Label>
+                      <Select value={attachModel} onValueChange={(v) => setAttachModel(v as TranscribeModel)}>
+                        <SelectTrigger className="h-8 w-auto text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                           <SelectItem value="fast">Fast (tiny)</SelectItem>
+                           <SelectItem value="accurate">Accurate (base)</SelectItem>
+                           <SelectItem value="best">Best (large-v3)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="flex gap-1 rounded-lg bg-muted/70 p-1">
                     <button
                       type="button"
@@ -1150,32 +1366,6 @@ function WatchContent({ id }: { id: string }) {
                         if (e.key === "Enter") void handleAttachVideo();
                       }}
                     />
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground whitespace-nowrap">Source:</Label>
-                      <Select value={transcribeMode} onValueChange={(v) => setTranscribeMode(v as typeof transcribeMode)}>
-                        <SelectTrigger className="h-8 w-auto text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="auto">Auto (captions first)</SelectItem>
-                          <SelectItem value="youtube">YouTube captions only</SelectItem>
-                          <SelectItem value="whisper">Whisper only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground whitespace-nowrap">Model:</Label>
-                      <Select value={attachModel} onValueChange={(v) => setAttachModel(v as TranscribeModel)}>
-                        <SelectTrigger className="h-8 w-auto text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                           <SelectItem value="fast">Fast (tiny)</SelectItem>
-                           <SelectItem value="accurate">Accurate (base)</SelectItem>
-                           <SelectItem value="best">Best (large-v3)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                     {/* Progress bar — always visible during transcription */}
                     {(isAttaching || isGrabbing || (attachErrorCode === "GRAB_FAILED" && grabProgress)) && (
                       <div className="flex flex-col gap-1.5">
@@ -1320,10 +1510,49 @@ function WatchContent({ id }: { id: string }) {
                 </span>
               </div>
             )}
+          {/* VOCABULARY under video */}
+          {mode !== "watch" && (
+            <div className="min-w-0 shrink-0 rounded-2xl border bg-card p-3 shadow-sm lg:max-h-[30vh] lg:overflow-y-auto">
+              <div className="flex items-center justify-between pb-2">
+                <h2 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <BookMarked className="size-3.5" /> Vocabulary
+                </h2>
+                <Badge variant="secondary" className="text-[10px]">{savedWords.length}</Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground">{wordsSavedHere} from this video</p>
+              {savedWords.length === 0 ? (
+                <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+                  Tap any word to save it.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-0.5">
+                  {savedWords.slice(0, 30).map((w) => (
+                    <li key={w._id} className="flex items-center gap-1.5 text-xs">
+                      <SpeakerButton text={w.display} lang={w.language} label={`Pronounce ${w.display}`} className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="font-medium">{w.display}</span>
+                      {w.definition && <span className="truncate text-muted-foreground">— {w.definition}</span>}
+                    </li>
+                  ))}
+                  {savedWords.length > 30 && (
+                    <li className="pt-1 text-[10px] text-muted-foreground">+{savedWords.length - 30} more</li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
           </section>
 
-          {/* TRANSCRIPT + VOCABULARY */}
+          {/* DRAG DIVIDER */}
+          {!focusMode && mode !== "watch" && (
+            <div
+              onMouseDown={handleDragStart}
+              className="hidden w-1.5 shrink-0 cursor-col-resize bg-border/50 transition-colors hover:bg-primary/40 lg:block"
+            />
+          )}
+
+          {/* TRANSCRIPT */}
           {mode !== "watch" && (
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <TranscriptPanel
               subtitle={subtitle}
               activeRow={activeRow}
@@ -1336,11 +1565,8 @@ function WatchContent({ id }: { id: string }) {
               revealAll={revealAll}
               revealedWords={revealedWords}
               savedWordsSet={savedWordsSet}
-              savedWords={savedWords}
-              wordsSavedHere={wordsSavedHere}
               hasTimestamps={hasTimestamps}
               transcriptOpen={transcriptOpen}
-              focusMode={focusMode}
               onWordClick={openWord}
               onWordSave={saveWordFromToken}
               onLineSeek={seekToLine}
@@ -1372,6 +1598,7 @@ function WatchContent({ id }: { id: string }) {
               onSetTranscriptOpen={setTranscriptOpen}
               transcriptRef={transcriptRef}
             />
+            </div>
           )}
         </div>
       )}
@@ -1381,7 +1608,14 @@ function WatchContent({ id }: { id: string }) {
         onOpenChange={setWordDialogOpen}
         selection={selection}
         existing={selection ? (existing(selection.word) ?? null) : null}
-        videoRef={playerRef}
+      />
+
+      <TranscribeCompare
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        youtubeLines={compareYoutube ?? []}
+        whisperLines={compareWhisper ?? []}
+        onSelect={handleCompareSelect}
       />
 
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>

@@ -4,20 +4,13 @@ import { useEffect, useRef } from "react";
 
 interface YouTubePlayerProps {
   videoId: string;
-  /** Filled in once the player is ready, so the parent can seek. */
   playerRef: React.MutableRefObject<PlayerHandle | null>;
   onReady?: () => void;
-  /** Called continuously with the current playback time in seconds. */
   onTime?: (seconds: number) => void;
-  /** Called when playback starts/pauses/ends. */
   onPlayStateChange?: (playing: boolean) => void;
   className?: string;
 }
 
-/**
- * Embeds a YouTube video and reports its playback time. No API key needed —
- * uses the free IFrame Player API.
- */
 export function YouTubePlayer({
   videoId,
   playerRef,
@@ -62,9 +55,23 @@ export function YouTubePlayer({
                 playVideo: () => yt.playVideo(),
                 pauseVideo: () => yt.pauseVideo(),
                 getCurrentTime: () => yt.getCurrentTime(),
+                getDuration: () => yt.getDuration(),
+                setPlaybackRate: (rate) => yt.setPlaybackRate(rate),
+                getVolume: () => yt.getVolume() / 100,
+                setVolume: (vol) => yt.setVolume(vol * 100),
+                isMuted: () => yt.isMuted(),
+                mute: () => yt.mute(),
+                unmute: () => yt.unMute(),
                 getInternalPlayer: () => null,
               };
               onReadyRef.current?.();
+              // Disable pointer events on iframe so overlays receive clicks
+              setTimeout(() => {
+                const iframe = container.querySelector("iframe") as HTMLElement | null;
+                if (iframe) {
+                  iframe.style.pointerEvents = "none";
+                }
+              }, 0);
             },
             onStateChange: (event) => {
               if (disposed) return;
@@ -75,17 +82,25 @@ export function YouTubePlayer({
             },
           },
         });
-        timer = window.setInterval(() => {
-          if (!disposed && player && playerRef.current) {
-            onTimeRef.current?.(player.getCurrentTime());
+        let lastReported = -1;
+        const tick = () => {
+          if (disposed) return;
+          if (player && playerRef.current) {
+            const t = player.getCurrentTime();
+            if (Math.abs(t - lastReported) > 0.02) {
+              lastReported = t;
+              onTimeRef.current?.(t);
+            }
           }
-        }, 250);
+          timer = requestAnimationFrame(tick);
+        };
+        timer = requestAnimationFrame(tick);
       })
       .catch(() => undefined);
 
     return () => {
       disposed = true;
-      if (timer !== undefined) window.clearInterval(timer);
+      if (timer !== undefined) cancelAnimationFrame(timer);
       playerRef.current = null;
       try {
         player?.destroy();
@@ -96,5 +111,5 @@ export function YouTubePlayer({
     };
   }, [videoId, playerRef]);
 
-  return <div ref={containerRef} className={className} />;
+  return <div ref={containerRef} className={className} tabIndex={-1} />;
 }

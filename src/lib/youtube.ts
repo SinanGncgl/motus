@@ -5,9 +5,16 @@
 
 export interface YouTubePlayer {
   getCurrentTime(): number;
+  getDuration(): number;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   playVideo(): void;
   pauseVideo(): void;
+  setPlaybackRate(rate: number): void;
+  getVolume(): number;
+  setVolume(volume: number): void;
+  isMuted(): boolean;
+  mute(): void;
+  unMute(): void;
   destroy(): void;
 }
 
@@ -124,7 +131,7 @@ export async function grabYouTubeAudio(url: string): Promise<File> {
 }
 
 export interface GrabProgressEvent {
-  stage: "downloading" | "loading";
+  stage: "grabbing" | "downloading" | "loading";
   percent: number;
 }
 
@@ -138,11 +145,13 @@ export interface GrabProgressEvent {
 export async function grabYouTubeAudioStream(
   url: string,
   onProgress?: (p: GrabProgressEvent) => void,
+  language?: string,
 ): Promise<File> {
   const esRef: { current: EventSource | null } = { current: null };
   try {
+    const langParam = language && language !== "auto" ? `&lang=${encodeURIComponent(language.split("-")[0] || language)}` : "";
     const result = await new Promise<File>((resolve, reject) => {
-      esRef.current = new EventSource(`${GRAB_SERVER_URL}/grab-stream?url=${encodeURIComponent(url)}`);
+      esRef.current = new EventSource(`${GRAB_SERVER_URL}/grab-stream?url=${encodeURIComponent(url)}${langParam}`);
       const es = esRef.current;
       const close = () => {
         try {

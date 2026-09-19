@@ -48,6 +48,11 @@ export function FilePlayer({
       getCurrentTime: () => video.currentTime,
       getDuration: () => (Number.isFinite(video.duration) ? video.duration : 0),
       setPlaybackRate: (rate: number) => { video.playbackRate = rate; },
+      getVolume: () => video.volume,
+      setVolume: (vol: number) => { video.volume = vol; },
+      isMuted: () => video.muted,
+      mute: () => { video.muted = true; },
+      unmute: () => { video.muted = false; },
       getInternalPlayer: () => video,
     };
     playerRef.current = handle;

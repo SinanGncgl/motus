@@ -97,10 +97,10 @@ export function SpeedReviewPractice({ cards, onComplete }: SpeedReviewPracticePr
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          className="flex w-full max-w-md flex-col items-center gap-3 rounded-xl border bg-card p-8 shadow-sm"
+          className="flex w-full max-w-lg flex-col items-center gap-3 overflow-y-auto rounded-xl border bg-card p-8 shadow-sm"
         >
           {current?.screenshotUrl && (
-            <img src={current.screenshotUrl} alt="" className="mb-2 max-h-32 rounded-lg object-cover" />
+            <img src={current.screenshotUrl} alt="" className="mb-2 w-full rounded-lg object-contain" />
           )}
           <p className="text-center text-2xl font-semibold">{current?.front}</p>
 

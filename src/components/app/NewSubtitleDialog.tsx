@@ -3,6 +3,7 @@ import {
   TranscribedChip,
   type TranscribedFile,
 } from "@/components/app/TranscribeFile";
+import { TranscribeCompare } from "@/components/app/TranscribeCompare";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,7 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { localApi } from "@/lib/local-api";
+import { localApi, type LocalLine } from "@/lib/local-api";
+import { settings } from "@/lib/settings";
 import { parseSubtitleText, type SubtitleLine } from "@/lib/subtitles";
 import {
   transcribeErrorMessage,
@@ -51,8 +53,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 const GRAB_STAGE_LABELS: Record<TranscribeProgress["stage"], string> = {
+  grabbing: "Grabbing audio from YouTube…",
   decoding: "Reading audio…",
-  downloading: "Downloading speech model…",
+  downloading: "Downloading audio…",
   loading: "Preparing…",
   transcribing: "Transcribing… (this can take a moment)",
 };
@@ -77,7 +80,12 @@ export function NewSubtitleDialog({
   const [mode, setMode] = useState<"youtube" | "upload" | "paste">("youtube");
   const [title, setTitle] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [language, setLanguage] = useState("en-US");
+  const [language, setLanguage] = useState(
+    () => {
+      const src = settings.get().sourceLanguage;
+      return src && src !== "auto" ? src : "en-US";
+    },
+  );
   const [rawText, setRawText] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [collection, setCollection] = useState("");
@@ -97,6 +105,10 @@ export function NewSubtitleDialog({
     null,
   );
   const [whisperModel, setWhisperModel] = useState<TranscribeModel>("best");
+  const [sourceMode, setSourceMode] = useState<"auto" | "youtube" | "whisper" | "compare">("auto");
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareYoutube, setCompareYoutube] = useState<LocalLine[] | null>(null);
+  const [compareWhisper, setCompareWhisper] = useState<LocalLine[] | null>(null);
 
   const videoId = youtubeUrl.trim()
     ? (extractYouTubeId(youtubeUrl) ?? null)
@@ -196,7 +208,74 @@ export function NewSubtitleDialog({
     setGrabError(null);
     setIsGrabbing(true);
     try {
-      const file = await grabYouTubeAudioStream(youtubeUrl, setGrabProgress);
+      // COMPARE mode: fetch both YouTube captions and Whisper
+      if (sourceMode === "compare" && videoId) {
+        setGrabProgress({ stage: "loading", note: "Fetching YouTube captions…" });
+        let youtubeLines: LocalLine[] = [];
+        try {
+          const ytResult = await localApi.transcript(videoId, language);
+          if (ytResult.lines && ytResult.lines.length > 0) {
+            youtubeLines = ytResult.lines;
+          }
+        } catch { /* no YouTube captions */ }
+
+        setGrabProgress({ stage: "downloading", percent: 0, note: "Downloading audio for Whisper…" });
+        const file = await grabYouTubeAudioStream(youtubeUrl, setGrabProgress, language);
+        setGrabProgress({ stage: "loading", note: "Transcribing with Whisper…" });
+        const whisperResult = await transcribeFile(file, {
+          language,
+          model: whisperModel,
+          onProgress: setGrabProgress,
+        });
+
+        if (youtubeLines.length === 0 && whisperResult.lines.length === 0) {
+          setGrabError("No captions available and Whisper couldn't detect any speech.");
+          return;
+        }
+
+        setCompareYoutube(youtubeLines);
+        setCompareWhisper(whisperResult.lines);
+        setCompareOpen(true);
+        setIsGrabbing(false);
+        return;
+      }
+
+      // Whisper-only mode
+      if (sourceMode === "whisper" || (!videoId && sourceMode !== "youtube")) {
+        const file = await grabYouTubeAudioStream(youtubeUrl, setGrabProgress, language);
+        const result = await transcribeFile(file, {
+          language,
+          model: whisperModel,
+          onProgress: setGrabProgress,
+        });
+        setGrabProgress({ stage: "loading" });
+        const { storageId, fileName } = await localApi.upload(file);
+        setFetchedFile({ lines: result.lines, fileId: String(storageId), fileName });
+        setFetched({ videoId: videoId ?? "audio", lines: result.lines });
+        if (!title.trim()) setTitle(`YouTube video — ${videoId ?? "audio"}`);
+        setFetchError(null);
+        return;
+      }
+
+      // YouTube-only or Auto mode: try YouTube captions first
+      if (videoId) {
+        setGrabProgress({ stage: "loading", note: "Checking YouTube captions…" });
+        try {
+          const ytResult = await localApi.transcript(videoId, language);
+          if (ytResult.lines && ytResult.lines.length > 0) {
+            setFetched({ videoId, lines: ytResult.lines });
+            if (!title.trim()) setTitle(`YouTube video — ${videoId}`);
+            setFetchError(null);
+            toast.success(`YouTube captions loaded (${ytResult.lines.length} lines)`);
+            return;
+          }
+        } catch {
+          // No YouTube captions available — fall through to grab+transcribe
+        }
+      }
+
+      // Auto fallback: no YouTube captions — grab + Whisper
+      const file = await grabYouTubeAudioStream(youtubeUrl, setGrabProgress, language);
       const result = await transcribeFile(file, {
         language,
         model: whisperModel,
@@ -205,11 +284,7 @@ export function NewSubtitleDialog({
 
       setGrabProgress({ stage: "loading" });
       const { storageId, fileName } = await localApi.upload(file);
-      setFetchedFile({
-        lines: result.lines,
-        fileId: String(storageId),
-        fileName,
-      });
+      setFetchedFile({ lines: result.lines, fileId: String(storageId), fileName });
       setFetched({ videoId: videoId ?? "audio", lines: result.lines });
       if (!title.trim()) setTitle(`YouTube video — ${videoId ?? "audio"}`);
       setFetchError(null);
@@ -233,7 +308,17 @@ export function NewSubtitleDialog({
     }
   };
 
+  const handleCompareSelect = (lines: LocalLine[], source: "youtube" | "whisper") => {
+    setFetched({ videoId: videoId ?? "audio", lines });
+    setCompareOpen(false);
+    setCompareYoutube(null);
+    setCompareWhisper(null);
+    if (!title.trim()) setTitle(`YouTube video — ${videoId ?? "audio"}`);
+    toast.success(`${source === "youtube" ? "YouTube captions" : "Whisper transcription"} selected (${lines.length} lines)`);
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
@@ -303,7 +388,7 @@ export function NewSubtitleDialog({
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="subtitle-language">Language</Label>
                   <Select value={language} onValueChange={setLanguage}>
@@ -320,18 +405,34 @@ export function NewSubtitleDialog({
                   </Select>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="subtitle-whisper-model">Whisper model</Label>
-                  <Select value={whisperModel} onValueChange={(v) => setWhisperModel(v as TranscribeModel)}>
-                    <SelectTrigger id="subtitle-whisper-model" className="w-full">
+                  <Label htmlFor="subtitle-source">Source</Label>
+                  <Select value={sourceMode} onValueChange={(v) => setSourceMode(v as typeof sourceMode)}>
+                    <SelectTrigger id="subtitle-source" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                    <SelectItem value="fast">Fast (tiny)</SelectItem>
-                    <SelectItem value="accurate">Accurate (base)</SelectItem>
-                    <SelectItem value="best">Best (large-v3)</SelectItem>
+                      <SelectItem value="auto">Auto (captions first)</SelectItem>
+                      <SelectItem value="youtube">YouTube captions</SelectItem>
+                      <SelectItem value="whisper">Whisper only</SelectItem>
+                      <SelectItem value="compare">Compare both</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {sourceMode !== "youtube" && (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="subtitle-whisper-model">Whisper model</Label>
+                    <Select value={whisperModel} onValueChange={(v) => setWhisperModel(v as TranscribeModel)}>
+                      <SelectTrigger id="subtitle-whisper-model" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                      <SelectItem value="fast">Fast (tiny)</SelectItem>
+                      <SelectItem value="accurate">Accurate (base)</SelectItem>
+                      <SelectItem value="best">Best (large-v3)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -356,7 +457,7 @@ export function NewSubtitleDialog({
                       </span>
                     )}
                   </div>
-                  {(grabProgress?.stage === "downloading" || grabProgress?.stage === "transcribing") && grabProgress.percent !== undefined && (
+                  {(grabProgress?.stage === "grabbing" || grabProgress?.stage === "downloading" || grabProgress?.stage === "transcribing") && grabProgress.percent !== undefined && (
                     <Progress
                       value={grabProgress.percent}
                       className="h-1.5"
@@ -534,5 +635,14 @@ export function NewSubtitleDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <TranscribeCompare
+      open={compareOpen}
+      onOpenChange={setCompareOpen}
+      youtubeLines={compareYoutube ?? []}
+      whisperLines={compareWhisper ?? []}
+      onSelect={handleCompareSelect}
+    />
+    </>
   );
 }

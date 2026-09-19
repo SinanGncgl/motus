@@ -20,6 +20,7 @@ interface TranscribeFileProps {
 }
 
 const STAGE_LABELS: Record<TranscribeProgress["stage"], string> = {
+  grabbing: "Grabbing audio from YouTube…",
   decoding: "Reading audio…",
   downloading: "Downloading speech model…",
   loading: "Preparing…",

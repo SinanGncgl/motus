@@ -23,7 +23,12 @@ import {
   SkipBack,
   SkipForward,
   ChevronsLeft,
+  Volume2,
+  Volume1,
+  Volume,
+  VolumeX,
 } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 
 type LearnMode = "watch" | "learn" | "listen" | "practice";
 
@@ -50,10 +55,13 @@ interface VideoControlsProps {
   loopB: number | null;
   focusMode: boolean;
   practiceHide: boolean;
+  volume: number;
+  isMuted: boolean;
   onPrevLine: () => void;
   onNextLine: () => void;
   onReplay: () => void;
   onSeekToStart: () => void;
+  onSeek: (time: number) => void;
   onSetPlaybackRate: (rate: number) => void;
   onSetMode: (mode: LearnMode) => void;
   onToggleCaptions: () => void;
@@ -66,12 +74,40 @@ interface VideoControlsProps {
   onSetHelpOpen: (open: boolean) => void;
   onSetPracticeHide: (hide: boolean) => void;
   onRevealAll: () => void;
+  onSetVolume: (volume: number) => void;
+  onToggleMute: () => void;
 }
 
 function formatClock(total: number): string {
   const m = Math.floor(total / 60);
   const s = Math.floor(total % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/** Generate evenly-spaced tick positions (0–1) for the time scale. */
+function timeMarkers(duration: number): number[] {
+  if (duration <= 0) return [];
+  const interval = duration <= 60 ? 10 : duration <= 300 ? 30 : 60;
+  const markers: number[] = [];
+  for (let t = interval; t < duration; t += interval) {
+    markers.push(t / duration);
+  }
+  return markers;
+}
+
+/** Generate labels for the start, quarter, half, three-quarter, and end. */
+function timeLabels(duration: number): string[] {
+  if (duration <= 0) return [];
+  if (duration <= 60) {
+    return ["0:00", formatClock(duration)];
+  }
+  return [
+    "0:00",
+    formatClock(duration * 0.25),
+    formatClock(duration * 0.5),
+    formatClock(duration * 0.75),
+    formatClock(duration),
+  ];
 }
 
 export function VideoControls({
@@ -87,10 +123,13 @@ export function VideoControls({
   loopB,
   focusMode,
   practiceHide,
+  volume,
+  isMuted,
   onPrevLine,
   onNextLine,
   onReplay,
   onSeekToStart,
+  onSeek,
   onSetPlaybackRate,
   onSetMode,
   onToggleCaptions,
@@ -103,8 +142,46 @@ export function VideoControls({
   onSetHelpOpen,
   onSetPracticeHide,
   onRevealAll,
+  onSetVolume,
+  onToggleMute,
 }: VideoControlsProps) {
   const videoElapsed = duration > 0 ? time / duration : 0;
+  const scrubRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const seekFromEvent = useCallback(
+    (e: React.MouseEvent | MouseEvent) => {
+      if (!scrubRef.current || duration <= 0) return;
+      const rect = scrubRef.current.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      onSeek(pct * duration);
+    },
+    [duration, onSeek],
+  );
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+      seekFromEvent(e);
+    },
+    [seekFromEvent],
+  );
+
+  // Global mouse move/up for drag scrubbing
+  const dragRef = useRef<{ onMove: (e: MouseEvent) => void; onUp: () => void } | null>(null);
+  if (isDragging && !dragRef.current) {
+    const onMove = (e: MouseEvent) => seekFromEvent(e);
+    const onUp = () => {
+      setIsDragging(false);
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    dragRef.current = { onMove, onUp };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 shadow-sm">
@@ -161,21 +238,97 @@ export function VideoControls({
 
         {/* Progress: time / duration + bar */}
         <div className="flex min-w-[160px] flex-1 items-center gap-2 px-1">
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+          <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
             {formatClock(time)}
-            {duration > 0 && (
-              <span className="text-muted-foreground/60">
-                {" "}
-                / {formatClock(duration)}
-              </span>
-            )}
           </span>
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-200"
-              style={{ width: `${Math.round(videoElapsed * 100)}%` }}
-            />
+          <div
+            ref={scrubRef}
+            className="relative flex-1 cursor-pointer select-none"
+            onMouseDown={handleMouseDown}
+          >
+            {/* Time markers */}
+            {duration > 0 && (
+              <div className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-between px-px">
+                {timeMarkers(duration).map((t) => (
+                  <div
+                    key={t}
+                    className="h-2.5 w-px bg-muted-foreground/20"
+                  />
+                ))}
+              </div>
+            )}
+            {/* Progress bar */}
+            <div className="relative h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-200"
+                style={{ width: `${Math.round(videoElapsed * 100)}%` }}
+              />
+              {/* Scrub handle */}
+              <div
+                className={cn(
+                  "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-primary shadow-sm transition-opacity",
+                  isDragging ? "size-3.5 opacity-100" : "size-2.5 opacity-0 group-hover/scrub:opacity-100",
+                )}
+                style={{ left: `${Math.round(videoElapsed * 100)}%` }}
+              />
+            </div>
+            {/* Time labels */}
+            {duration > 0 && (
+              <div className="mt-0.5 flex justify-between px-px">
+                {timeLabels(duration).map((label) => (
+                  <span
+                    key={label}
+                    className="font-mono text-[9px] tabular-nums text-muted-foreground/40"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
+          <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground/60">
+            {formatClock(duration)}
+          </span>
+        </div>
+
+        {/* Volume control */}
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="cursor-pointer"
+            onClick={onToggleMute}
+            aria-label={isMuted ? "Unmute" : "Mute"}
+            title={isMuted ? "Unmute (M)" : "Mute (M)"}
+          >
+            {isMuted || volume === 0 ? (
+              <VolumeX className="size-4" />
+            ) : volume < 0.5 ? (
+              <Volume className="size-4" />
+            ) : volume < 0.75 ? (
+              <Volume1 className="size-4" />
+            ) : (
+              <Volume2 className="size-4" />
+            )}
+          </Button>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={isMuted ? 0 : volume}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              onSetVolume(val);
+              if (val > 0 && isMuted) {
+                onToggleMute();
+              }
+            }}
+            className="h-1.5 w-20 cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+            aria-label="Volume"
+            title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+          />
         </div>
 
         {loopA !== null && loopB !== null && (

@@ -13,6 +13,16 @@ export interface PlayerHandle {
   getDuration?(): number;
   /** Set playback speed (0.5, 1, 1.25, …). Optional; may be a no-op. */
   setPlaybackRate?(rate: number): void;
+  /** Get volume level (0.0 to 1.0). Optional. */
+  getVolume?(): number;
+  /** Set volume level (0.0 to 1.0). Optional. */
+  setVolume?(volume: number): void;
+  /** Check if muted. Optional. */
+  isMuted?(): boolean;
+  /** Mute the player. Optional. */
+  mute?(): void;
+  /** Unmute the player. Optional. */
+  unmute?(): void;
   /** Return the underlying <video> element for frame capture, if available. */
   getInternalPlayer(): HTMLVideoElement | null;
 }

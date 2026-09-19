@@ -16,6 +16,45 @@ const SCREENSHOTS_DIR = join(DATA_DIR, "screenshots");
 const DIST_DIR = process.env.DIST_DIR ?? join(process.cwd(), "dist");
 const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://sinang@127.0.0.1:5432/motus";
 const MAX_BODY = 60 * 1024 * 1024;
+
+// Find best audio format ID for a given language using yt-dlp --dump-json
+// NOTE: Do NOT pass --cookies-from-browser here — it forces yt-dlp to use
+// a logged-in session that only serves HLS combined streams (no audio-only).
+async function findAudioFormat(url, lang) {
+  const args = ["--dump-json", "--no-playlist", url];
+  return new Promise((resolve) => {
+    const p = spawn("yt-dlp", args, { windowsHide: true });
+    let stdout = "";
+    let stderr = "";
+    p.stdout.on("data", (d) => { stdout += d.toString(); });
+    p.stderr.on("data", (d) => { stderr += d.toString(); });
+    p.on("close", (code) => {
+      try {
+        const data = JSON.parse(stdout);
+        const langCode = lang.split("-")[0];
+        const langFormats = (data.formats || []).filter(
+          (f) => f.language && f.language.toLowerCase().startsWith(langCode)
+        );
+        const audioFormats = langFormats.filter(
+          (f) => (f.ext === "m4a" || f.ext === "webm") && (!f.vcodec || f.vcodec === "none")
+        );
+        audioFormats.sort((a, b) => {
+          if (a.ext === "m4a" && b.ext !== "m4a") return -1;
+          if (a.ext !== "m4a" && b.ext === "m4a") return 1;
+          return (b.tbr || 0) - (a.tbr || 0);
+        });
+        const best = audioFormats[0];
+        console.log(`[findAudioFormat] lang=${lang} picked=${best ? best.format_id : "none"}`);
+        resolve(best ? best.format_id : null);
+      } catch (e) {
+        console.log(`[findAudioFormat] error: ${e.message}`);
+        resolve(null);
+      }
+    });
+    p.on("error", () => resolve(null));
+  });
+}
+
 // Base the app uses to reach the local server (same-origin in the browser).
 const GRAB_BASE = process.env.GRAB_BASE ?? "";
 // Optional LibreTranslate server. Defaults to a self-hosted instance on
@@ -115,36 +154,33 @@ CREATE TABLE IF NOT EXISTS word_group_members (
   word_id TEXT NOT NULL,
   PRIMARY KEY (group_id, word_id)
 );
-ALTER TABLE word_group_members ADD CONSTRAINT fk_group FOREIGN KEY (group_id) REFERENCES word_groups(id) ON DELETE CASCADE;
-ALTER TABLE word_group_members ADD CONSTRAINT fk_word FOREIGN KEY (word_id) REFERENCES saved_words(id) ON DELETE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE word_group_members ADD CONSTRAINT fk_group FOREIGN KEY (group_id) REFERENCES word_groups(id) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE word_group_members ADD CONSTRAINT fk_word FOREIGN KEY (word_id) REFERENCES saved_words(id) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 `;
 
 const id = (p) => `${p}_${randomUUID()}`;
 const now = () => Date.now();
 function formatCardBack(a, fallbackWord, cardType = "word") {
   const parts = [];
-  if (cardType === "word") {
-    if (a.definition) parts.push(a.definition);
-    if (a.example) parts.push(`Context: ${a.example}`);
-  } else {
-    if (a.definition) parts.push(a.definition);
-    if (a.example) parts.push(`Context: ${a.example}`);
-    if (a.translation) parts.push(`Translation: ${a.translation}`);
-    if (a.sourceTitle) parts.push(`Source: ${a.sourceTitle}`);
-  }
+  if (a.translation) parts.push(a.translation);
+  if (a.definition && a.definition !== a.translation) parts.push(a.definition);
+  if (a.example && cardType !== "sentence") parts.push(`Context: ${a.example}`);
+  if (cardType === "sentence" && a.sourceTitle) parts.push(`Source: ${a.sourceTitle}`);
   return parts.join("\n\n") || fallbackWord;
 }
 
 // Initialize schema + seed default user.
-await pool.query("DROP TABLE IF EXISTS anki_cards CASCADE");
-await pool.query("DROP TABLE IF EXISTS saved_words CASCADE");
 await pool.query(SCHEMA);
 await pool.query(
   "INSERT INTO users (id,name,email,image,is_anonymous) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING",
   ["local-user", "Local learner", "local@localhost", null, true],
 );
-// Clean screenshots
-try { for (const f of await readdir(SCREENSHOTS_DIR)) await unlink(`${SCREENSHOTS_DIR}/${f}`); } catch {}
 
 // ---- query helpers ----
 const q = (text, params = []) => pool.query(text, params);
@@ -206,6 +242,7 @@ async function cards(uid) {
 }
 
 async function transcript(videoId, lang) {
+  // Try manual captions first via YouTube API (fast, no yt-dlp needed)
   for (const language of [(lang || "en-US").split("-")[0], "en"]) {
     try {
       const r = await fetch(`https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=${language}&fmt=json3`, { headers: { "User-Agent": "Mozilla/5.0" } });
@@ -215,6 +252,37 @@ async function transcript(videoId, lang) {
       if (lines.length) return lines;
     } catch { }
   }
+  // Fall back to yt-dlp for auto-generated captions (needs signed URLs)
+  const langCode = (lang || "en").split("-")[0];
+  const tmpFile = join(UPLOAD_DIR, `_subs_${videoId}_${langCode}.json3`);
+  try {
+    const args = ["--write-sub", "--write-auto-sub", "--sub-lang", langCode, "--sub-format", "json3", "--skip-download", "--no-playlist", "-o", tmpFile.replace(".json3", ""), `https://www.youtube.com/watch?v=${videoId}`];
+    await new Promise((resolve, reject) => {
+      const p = spawn("yt-dlp", args, { windowsHide: true, env: { ...process.env, PYTHONUNBUFFERED: "1" } });
+      let stderr = "";
+      p.stderr.on("data", (d) => { stderr += d.toString(); });
+      p.on("error", reject);
+      p.on("close", (code) => code === 0 ? resolve() : reject(new Error(stderr.slice(-300) || "yt-dlp failed")));
+    });
+    // yt-dlp writes to <videoid>.<lang>.json3 or <videoid>.<lang>.orig.json3
+    const possibleFiles = [
+      `${tmpFile.replace(".json3", "")}.${langCode}.json3`,
+      `${tmpFile.replace(".json3", "")}.${langCode}.orig.json3`,
+    ];
+    let subFile = "";
+    for (const f of possibleFiles) {
+      try { await readFile(f); subFile = f; break; } catch { }
+    }
+    if (!subFile) throw new Error("No subtitle file produced");
+    const raw = JSON.parse(await readFile(subFile, "utf8"));
+    const events = raw.events ?? [];
+    const lines = events.filter((e) => e.segs).map((e, i) => ({ index: i + 1, start: e.tStartMs / 1000, end: (e.tStartMs + (e.dDurationMs ?? 0)) / 1000, text: e.segs.map((s) => s.utf8 ?? "").join("").trim() })).filter((x) => x.text);
+    // Cleanup temp files
+    for (const f of [...possibleFiles, subFile]) {
+      try { await unlink(f); } catch { }
+    }
+    if (lines.length) return lines;
+  } catch { }
   throw new Error("NO_CAPTIONS");
 }
 function ytDlp(url, output) {
@@ -222,7 +290,7 @@ function ytDlp(url, output) {
   const cookiesFrom = process.env.GRAB_COOKIES_FROM_BROWSER?.trim() ?? "";
   if (cookiesFrom) args.push("--cookies-from-browser", cookiesFrom);
   return new Promise((resolve, reject) => {
-    const p = spawn("yt-dlp", args);
+    const p = spawn("yt-dlp", args, { env: { ...process.env, PYTHONUNBUFFERED: "1" } });
     let e = ""; p.stderr.on("data", (d) => (e += d));
     p.on("error", () => reject(new Error("YTDLP_MISSING")));
     p.on("close", (code) => (code === 0 ? resolve() : reject(new Error(e.slice(-1500) || "YTDLP_FAILED"))));
@@ -597,6 +665,7 @@ const server = createServer(async (req, res) => {
       req.on("close", () => { closed = true; });
       const py = spawn("python3", [join(process.cwd(), "transcribe-server.py"), filePath, lang, modelSize], { windowsHide: true });
       let buf = "";
+      let stderrBuf = "";
       py.stdout.on("data", (chunk) => {
         buf += chunk.toString();
         // Process complete JSON lines
@@ -610,6 +679,9 @@ const server = createServer(async (req, res) => {
             if (msg.status === "done") {
               sse("done", { lines: msg.lines || [], language: msg.language });
               finish();
+            } else if (msg.status === "error") {
+              sse("error", { code: "TRANSCRIBE_FAILED", message: msg.message || "Transcription failed" });
+              finish();
             } else {
               sse("progress", msg);
             }
@@ -618,6 +690,8 @@ const server = createServer(async (req, res) => {
       });
       py.stderr.on("data", (d) => {
         const txt = d.toString();
+        stderrBuf += txt;
+        if (stderrBuf.length > 4000) stderrBuf = stderrBuf.slice(-4000);
         if (txt.includes("Downloading") || txt.includes("Downloading model")) {
           sse("progress", { status: "loading", message: txt.trim().slice(0, 200) });
         }
@@ -629,7 +703,9 @@ const server = createServer(async (req, res) => {
       });
       py.on("close", (code) => {
         if (code !== 0 && !closed) {
-          sse("error", { code: "TRANSCRIBE_FAILED", message: `Whisper exited with code ${code}` });
+          // Try to extract meaningful error from stderr
+          const lastLines = stderrBuf.split("\n").filter(l => l.trim()).slice(-3).join(" · ").slice(0, 300);
+          sse("error", { code: "TRANSCRIBE_FAILED", message: lastLines || `Whisper exited with code ${code}` });
         }
         finish();
       });
@@ -655,11 +731,15 @@ const server = createServer(async (req, res) => {
     // Accepts GET (for EventSource) with ?url=, or POST with a JSON body.
     if ((req.method === "POST" || req.method === "GET") && path === "/grab-stream") {
       let url = "";
+      let lang = "";
       if (req.method === "GET") {
-        url = new URL(req.url, `http://${req.headers.host}`).searchParams.get("url")?.trim() ?? "";
+        const parsed = new URL(req.url, `http://${req.headers.host}`);
+        url = parsed.searchParams.get("url")?.trim() ?? "";
+        lang = parsed.searchParams.get("lang")?.trim() ?? "";
       } else {
         const a = await body(req);
         url = typeof a?.url === "string" ? a.url.trim() : "";
+        lang = typeof a?.language === "string" ? a.language.trim() : "";
       }
       if (!/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//.test(url)) {
         return send(res, 400, { error: "INVALID_URL", message: "That isn't a YouTube link." });
@@ -680,10 +760,23 @@ const server = createServer(async (req, res) => {
         send("error", { code: "YTDLP_MISSING", message: "yt-dlp isn't installed. Run: brew install yt-dlp (or: pip install -U yt-dlp)" });
         return res.end();
       }
-      const args = ["-f", "bestaudio[ext=m4a]/bestaudio/best", "--no-playlist", "-x", "--audio-format", "mp3", "--newline", "-o", outPath, url];
       const cookiesFrom = process.env.GRAB_COOKIES_FROM_BROWSER?.trim() ?? "";
-      if (cookiesFrom) args.push("--cookies-from-browser", cookiesFrom);
-      const p = spawn("yt-dlp", args, { windowsHide: true });
+      // If a language is specified, find the right audio format first
+      let formatArg = "bestaudio[ext=m4a]/bestaudio/best";
+      let useSpecificFormat = false;
+      if (lang && lang !== "auto") {
+        const formatId = await findAudioFormat(url, lang);
+        if (formatId) {
+          formatArg = formatId;
+          useSpecificFormat = true;
+        }
+        console.log(`[grab-stream] lang=${lang} formatArg=${formatArg}`);
+      }
+      const args = ["-f", formatArg, "--no-playlist", "-x", "--audio-format", "mp3", "--newline", "-o", outPath, url];
+      // DASH formats (used for language selection) aren't available with cookies
+      if (cookiesFrom && !useSpecificFormat) args.push("--cookies-from-browser", cookiesFrom);
+      send("progress", { stage: "downloading", percent: 0 });
+      const p = spawn("yt-dlp", args, { windowsHide: true, env: { ...process.env, PYTHONUNBUFFERED: "1" } });
       let stderr = "";
       let closed = false;
       const finish = () => { if (!closed) { closed = true; res.end(); } };
@@ -697,6 +790,7 @@ const server = createServer(async (req, res) => {
         if (/\[download\]\s+Destination:/.test(txt)) send("progress", { stage: "downloading", percent: sent });
         if (/\[ExtractAudio\]\s+Destination:/.test(txt)) send("progress", { stage: "loading", percent: 100 });
       };
+      p.stdout.on("data", onErr);
       p.stderr.on("data", onErr);
       p.on("error", (err) => {
         send("error", { code: "YTDLP_MISSING", message: String(err?.message || err) });
@@ -744,6 +838,26 @@ const server = createServer(async (req, res) => {
         const m = d?.[0]?.meanings?.[0];
         return send(res, 200, { definition: m?.definitions?.[0]?.definition || "", example: m?.definitions?.find((x) => x.example)?.example || "" });
       } catch { return send(res, 200, null); }
+    }
+    // German dictionary lookup — returns base/infinitive form + definition
+    if (req.method === "POST" && path === "/api/dictionary/de") {
+      const a = await body(req);
+      const word = String(a.word || "").trim();
+      if (!word) return send(res, 200, null);
+      try {
+        const r = await fetch(`https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`);
+        if (r.ok) {
+          const d = await r.json();
+          const de = d?.de;
+          if (de) {
+            const all = [...(de.verb || []), ...(de.noun || []), ...(de.adjective || [])];
+            const def = all[0]?.definitions?.[0]?.definition || "";
+            const baseForm = de.verb?.[0]?.title?.replace(/^To /i, "").toLowerCase() || word;
+            return send(res, 200, { definition: def, baseForm });
+          }
+        }
+      } catch {}
+      return send(res, 200, { definition: "", baseForm: word });
     }
     // Proxy sentence translation to the LibreTranslate server (defaults to a
     // self-hosted instance on localhost:5000). The API key never reaches the

@@ -165,9 +165,9 @@ export default function Settings() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="auto">Auto-detect</SelectItem>
-              {LANGUAGES.map((l) => (
-                  <SelectItem key={l.code} value={l.code.split("-")[0] ?? l.code}>
-                    {l.label}
+                {LANGUAGES.map((l) => (
+                  <SelectItem key={l.code} value={l.code}>
+                   {l.label}
                   </SelectItem>
                 ))}
              </SelectContent>
@@ -202,19 +202,20 @@ export default function Settings() {
         <h2 className="text-base font-semibold">Translation</h2>
         <div className="flex flex-col gap-2 rounded-xl border bg-card/60 p-3">
           <Label>Translation service</Label>
-          <Select value={translationSvc} onValueChange={(v) => setTranslationSvc(v as "libretranslate" | "deepl")}>
+          <Select value={translationSvc} onValueChange={(v) => setTranslationSvc(v as "google" | "libretranslate" | "deepl")}>
             <SelectTrigger className="w-full sm:w-56">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="google">Google Translate (free, good quality)</SelectItem>
+              <SelectItem value="deepl">DeepL (best quality, needs API key)</SelectItem>
               <SelectItem value="libretranslate">LibreTranslate (local, free)</SelectItem>
-              <SelectItem value="deepl">DeepL (higher quality)</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            DeepL produces much better translations. Get a free API key at{" "}
+            Google Translate is free and requires no setup. DeepL is the highest quality — get a free API key at{" "}
             <a href="https://www.deepl.com/pro-api" target="_blank" rel="noreferrer" className="underline">deepl.com</a>{" "}
-            (500k chars/month free). The API key field below is used for DeepL when selected.
+            (500k chars/month free).
           </p>
         </div>
       </div>

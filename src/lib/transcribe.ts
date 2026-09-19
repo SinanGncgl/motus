@@ -10,6 +10,7 @@ import type { SubtitleLine } from "./subtitles";
 import { localApi } from "./local-api";
 
 export type TranscribeStage =
+  | "grabbing"
   | "decoding"
   | "downloading"
   | "loading"

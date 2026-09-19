@@ -1,11 +1,8 @@
-import { useMemo, useState } from "react";
 import { TranscriptLine } from "@/components/app/TranscriptLine";
-import { SpeakerButton } from "@/components/app/SpeakerButton";
-import { Badge } from "@/components/ui/badge";
-import { BookMarked, ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { tokenize } from "@/lib/subtitles";
-import type { LocalSubtitle, LocalWord } from "@/lib/local-api";
+import type { LocalSubtitle } from "@/lib/local-api";
 
 type LearnMode = "watch" | "learn" | "listen" | "practice";
 
@@ -21,11 +18,8 @@ interface TranscriptPanelProps {
   revealAll: boolean;
   revealedWords: Set<string>;
   savedWordsSet: Set<string>;
-  savedWords: LocalWord[];
-  wordsSavedHere: number;
   hasTimestamps: boolean;
   transcriptOpen: boolean;
-  focusMode: boolean;
   onWordClick: (word: string, raw: string, lineText: string) => void;
   onWordSave: (word: string, raw: string, lineText: string) => void;
   onLineSeek: (row: number) => void;
@@ -50,11 +44,8 @@ export function TranscriptPanel({
   revealAll,
   revealedWords,
   savedWordsSet,
-  savedWords,
-  wordsSavedHere,
   hasTimestamps,
   transcriptOpen,
-  focusMode,
   onWordClick,
   onWordSave,
   onLineSeek,
@@ -62,88 +53,29 @@ export function TranscriptPanel({
   onToggleSaveLine,
   onCopyLine,
   onTranslateLine,
-  onRemoveWord,
   onSetTranscriptOpen,
   transcriptRef,
-  }: TranscriptPanelProps) {
-  const [vocabOpen, setVocabOpen] = useState(false);
-
-  const vocabularyItems = useMemo(() => {
-    return savedWords.map((w) => (
-      <li
-        key={w._id}
-        className="group flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/50"
-      >
-        <button
-          type="button"
-          onClick={() =>
-            onWordClick(
-              w.word,
-              w.display,
-              w.example || "",
-            )
-          }
-          className="min-w-0 flex-1 text-left"
-        >
-          <span className="block truncate text-sm font-medium text-foreground">
-            {w.display}
-          </span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {w.definition || "—"}
-          </span>
-        </button>
-        <SpeakerButton
-          text={w.display}
-          lang={w.language}
-          label={`Pronounce ${w.display}`}
-          className="size-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-        />
-        <button
-          type="button"
-          onClick={() => onRemoveWord(w._id)}
-          className="size-6 shrink-0 rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          title="Remove from vocabulary"
-          aria-label={`Remove ${w.display}`}
-        >
-          <Trash2 className="size-3.5" />
-        </button>
-      </li>
-    ));
-  }, [savedWords, onWordClick, onRemoveWord]);
-
+}: TranscriptPanelProps) {
   return (
-    <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
-      {/* Transcript */}
-      <div className="min-w-0">
-        <div className="flex items-center justify-between px-1 pb-2">
-          <button
-            type="button"
-            onClick={() => onSetTranscriptOpen(!transcriptOpen)}
-            className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ChevronDown
-              className={cn(
-                "size-4 transition-transform",
-                !transcriptOpen && "-rotate-90",
-              )}
-            />
-            Transcript
-          </button>
-          <p className="text-xs text-muted-foreground">
-            {mode === "listen"
-              ? "German only — listen first"
-              : mode === "practice"
-                ? "Hide & reveal to test yourself"
-                : "Tap a line to jump · tap a word to save"}
-          </p>
-        </div>
+    <section className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <button
+          type="button"
+          onClick={() => onSetTranscriptOpen(!transcriptOpen)}
+          className="flex items-center gap-1 px-1 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronDown
+            className={cn(
+              "size-3.5 transition-transform",
+              !transcriptOpen && "-rotate-90",
+            )}
+          />
+          Transcript
+        </button>
         {transcriptOpen && (
           <div
             ref={transcriptRef}
-            className={cn(
-              "relative space-y-1 overflow-y-auto rounded-2xl border bg-card p-3 shadow-sm",
-              focusMode ? "max-h-[32vh]" : "max-h-[52vh]",
-            )}
+            className="relative space-y-0.5 overflow-y-auto rounded-xl border bg-card p-2 shadow-sm lg:flex-1 lg:min-h-0"
           >
             {subtitle.lines.map((line, i) => {
               const showTranslationForLine =
@@ -199,45 +131,6 @@ export function TranscriptPanel({
           </div>
         )}
       </div>
-
-      {/* Vocabulary panel */}
-      <aside className="min-w-0">
-        <div className="sticky top-4 rounded-2xl border bg-card p-4 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setVocabOpen((o) => !o)}
-            className="flex w-full items-center justify-between rounded-2xl border bg-card p-3 shadow-sm lg:hidden"
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              <BookMarked className="size-4" /> Vocabulary
-            </span>
-            <Badge variant="secondary">{savedWords.length}</Badge>
-          </button>
-          <div className="hidden items-center justify-between lg:flex">
-            <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              <BookMarked className="size-4" /> Vocabulary
-            </h2>
-            <Badge variant="secondary">{savedWords.length}</Badge>
-          </div>
-
-          <div className={`${vocabOpen ? "block" : "hidden"} lg:block`}>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {wordsSavedHere} from this video
-            </p>
-
-            {savedWords.length === 0 ? (
-              <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                Tap any German word to save it. Saved words appear here and
-                become practice cards automatically.
-              </p>
-            ) : (
-              <ul className="mt-3 max-h-[44vh] space-y-1 overflow-y-auto pr-1">
-                {vocabularyItems}
-              </ul>
-            )}
-          </div>
-        </div>
-      </aside>
     </section>
   );
 }

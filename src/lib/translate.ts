@@ -23,6 +23,29 @@ export function translationConfigured(): boolean {
   return true; // server proxy is always attempted; endpoint is a fallback
 }
 
+async function translateViaGoogle(
+  text: string,
+  targetLang: string,
+  sourceLang = "auto",
+): Promise<TranslateResult> {
+  try {
+    const sl = sourceLang === "auto" ? "auto" : sourceLang.slice(0, 2);
+    const tl = targetLang.slice(0, 2);
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json();
+    // Response format: [[["translated","original",...], ...], ...]
+    const sentences = data?.[0];
+    if (!Array.isArray(sentences)) return { ok: false, error: "bad-response" };
+    const translated = sentences.map((s: string[]) => s[0] ?? "").join("");
+    if (!translated) return { ok: false, error: "no-text" };
+    return { ok: true, text: translated };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
 async function translateViaServer(
   text: string,
   targetLang: string,
@@ -87,8 +110,26 @@ export async function translateLine(
 
   let result: TranslateResult | null = null;
 
+  // Google Translate (free, no API key, good quality)
+  if (translationService === "google") {
+    result = await translateViaGoogle(text, targetLang, sourceLang);
+    if (result.ok) {
+      setCachedTranslation(text, sourceLang, targetLang, translationService, result.text!);
+      return result;
+    }
+  }
+
   if (translationService === "deepl") {
     result = await translateViaDeepL(text, targetLang, sourceLang);
+    if (result.ok) {
+      setCachedTranslation(text, sourceLang, targetLang, translationService, result.text!);
+      return result;
+    }
+  }
+
+  // Fallback: try Google if the primary service failed
+  if (translationService !== "google") {
+    result = await translateViaGoogle(text, targetLang, sourceLang);
     if (result.ok) {
       setCachedTranslation(text, sourceLang, targetLang, translationService, result.text!);
       return result;

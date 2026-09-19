@@ -140,7 +140,7 @@ export default function Words() {
             reader.onloadend = () => resolve(reader.result as string);
             reader.readAsDataURL(blob);
           });
-          frontParts.push(`<img src="${base64}" />`);
+          frontParts.push(`<img src="${base64}" style="width:100%;border-radius:8px;" />`);
         } catch {
           // Skip screenshot if fetch fails
         }
