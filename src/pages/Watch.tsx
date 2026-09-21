@@ -1527,10 +1527,13 @@ function WatchContent({ id }: { id: string }) {
               ) : (
                 <ul className="mt-2 space-y-0.5">
                   {savedWords.slice(0, 30).map((w) => (
-                    <li key={w._id} className="flex items-center gap-1.5 text-xs">
-                      <SpeakerButton text={w.display} lang={w.language} label={`Pronounce ${w.display}`} className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="font-medium">{w.display}</span>
-                      {w.definition && <span className="truncate text-muted-foreground">— {w.definition}</span>}
+                    <li key={w._id} className="flex flex-col gap-0.5 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <SpeakerButton text={w.display} lang={w.language} label={`Pronounce ${w.display}`} className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="font-medium">{w.display}</span>
+                        {w.example && <span className="truncate text-muted-foreground italic">— {w.example}</span>}
+                      </div>
+                      {w.definition && <span className="pl-5 text-muted-foreground">{w.definition}</span>}
                     </li>
                   ))}
                   {savedWords.length > 30 && (
