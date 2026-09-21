@@ -162,6 +162,11 @@ DO $$ BEGIN
   ALTER TABLE word_group_members ADD CONSTRAINT fk_word FOREIGN KEY (word_id) REFERENCES saved_words(id) ON DELETE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+CREATE TABLE IF NOT EXISTS verbformen_cache (
+  word TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  scraped_at BIGINT NOT NULL
+);
 `;
 
 const id = (p) => `${p}_${randomUUID()}`;
