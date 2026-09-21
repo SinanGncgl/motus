@@ -329,21 +329,45 @@ async function staticFile(res, path) {
   }
 }
 
+function cleanHtml(html) {
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#?[a-z0-9]+;/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseConjugationTable(html) {
+  const rows = {};
+  const trMatches = html.matchAll(/<tr>([\s\S]*?)<\/tr>/gi);
+  for (const tr of trMatches) {
+    const tdMatches = [...tr[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+    if (tdMatches.length >= 2) {
+      const pronoun = cleanHtml(tdMatches[0][1]).toLowerCase();
+      const form = cleanHtml(tdMatches[tdMatches.length - 1][1]);
+      if (pronoun && form) rows[pronoun] = form;
+    }
+  }
+  return Object.keys(rows).length > 0 ? rows : null;
+}
+
 function parseVerbformen(html, word, type) {
   const result = { word, type, level: null, auxiliary: null, irregular: false, baseForm: word };
 
-  // Extract CEFR level (A1, A2, B1, B2, C1, C2)
-  const levelMatch = html.match(/<span[^>]*>\s*(A[12]|B[12]|C[12])\s*<\/span>/i);
+  const levelMatch = html.match(/<span class="bZrt"[^>]*>\s*(A[12]|B[12]|C[12])\s*<\/span>/i);
   if (levelMatch) result.level = levelMatch[1];
 
-  // Extract auxiliary verb for verbs
   if (type === "verb") {
-    const auxMatch = html.match(/(haben|sein)\s*<\/span>/i);
+    const auxMatch = html.match(/·\s*(haben|sein)/i);
     if (auxMatch) result.auxiliary = auxMatch[1].toLowerCase();
     result.irregular = /unregelmäßig/i.test(html);
   }
 
-  // Extract pronunciation
   const pronunciations = [];
   const pronSection = html.match(/<p[^>]*class="[^"]*srt[^"]*"[^>]*>([\s\S]*?)<\/p>/i);
   if (pronSection) {
@@ -352,113 +376,108 @@ function parseVerbformen(html, word, type) {
   }
   if (pronunciations.length > 0) result.pronunciation = pronunciations;
 
-  // Extract conjugation tables
   if (type === "verb") {
     result.conjugation = {};
 
-    // Present tense
-    const presentMatch = html.match(/Präsens([\s\S]*?)(?:Präteritum|<\/section)/i);
-    if (presentMatch) {
-      result.conjugation.present = parseConjugationTable(presentMatch[1]);
-    }
+    const vTblMatches = [...html.matchAll(/<div class="vTbl">\s*<h[23][^>]*>([\s\S]*?)<\/h[23]>([\s\S]*?)(?=<div class="vTbl">|<\/section|$)/gi)];
 
-    // Past tense
-    const pastMatch = html.match(/Präteritum([\s\S]*?)(?:Perfekt|Konjunktiv|<\/section)/i);
-    if (pastMatch) {
-      result.conjugation.past = parseConjugationTable(pastMatch[1]);
-    }
+    for (const tbl of vTblMatches) {
+      const header = cleanHtml(tbl[1]).toLowerCase();
+      const tableHtml = tbl[2];
 
-    // Perfect
-    const perfMatch = html.match(/Perfekt([\s\S]*?)(?:Plusquam|Futur|<\/section)/i);
-    if (perfMatch) {
-      result.conjugation.perfect = parseConjugationTable(perfMatch[1]);
-    }
+      if (header.includes("partizip")) {
+        const partizipIIMatch = tableHtml.match(/Partizip II[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i);
+        if (partizipIIMatch) result.conjugation.partizipII = cleanHtml(partizipIIMatch[1]);
+        const partizipIMatch = tableHtml.match(/Partizip I[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i);
+        if (partizipIMatch) result.conjugation.partizipI = cleanHtml(partizipIMatch[1]);
+        continue;
+      }
 
-    // Konjunktiv II
-    const konj2Match = html.match(/Konjunktiv II([\s\S]*?)(?:Imperativ|<\/section)/i);
-    if (konj2Match) {
-      result.conjugation.konjunktiv2 = parseConjugationTable(konj2Match[1]);
-    }
+      const conjugation = parseConjugationTable(tableHtml);
+      if (!conjugation) continue;
 
-    // Imperative
-    const impMatch = html.match(/Imperativ([\s\S]*?)(?:Infinitiv|Partizip|<\/section)/i);
-    if (impMatch) {
-      result.conjugation.imperative = parseConjugationTable(impMatch[1]);
-    }
-
-    // Partizip
-    const partizipMatch = html.match(/Partizip I[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?Partizip II[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i);
-    if (partizipMatch) {
-      result.conjugation.partizipI = cleanHtml(partizipMatch[1]);
-      result.conjugation.partizipII = cleanHtml(partizipMatch[2]);
-    }
-  }
-
-  // Extract examples (Beispiele)
-  result.examples = [];
-  const exempelSection = html.match(/Beispiele[\s\S]*?<section[^>]*>([\s\S]*?)<\/section>/i);
-  if (exempelSection) {
-    const exampleBlocks = exempelSection[1].matchAll(/<p[^>]*class="[^"]*beispieltext[^"]*"[^>]*>([\s\S]*?)<\/p>/gi);
-    for (const block of exampleBlocks) {
-      const text = cleanHtml(block[1]).trim();
-      if (text) result.examples.push(text);
-    }
-  }
-
-  // Extract translations
-  result.translations = {};
-  const transSection = html.match(/Übersetzungen[\s\S]*?<section[^>]*>([\s\S]*?)<\/section>/i);
-  if (transSection) {
-    const langBlocks = transSection[1].matchAll(/<img[^>]*alt="([^"]*)"[^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/gi);
-    for (const block of langBlocks) {
-      const lang = block[1].trim().toLowerCase();
-      const text = cleanHtml(block[2]).trim();
-      if (lang && text && lang !== "deutsch") {
-        result.translations[lang] = text;
+      if (header.includes("präsens") && !header.includes("konjunktiv")) {
+        result.conjugation.present = conjugation;
+      } else if (header.includes("präteritum") && !header.includes("konjunktiv")) {
+        result.conjugation.past = conjugation;
+      } else if (header.includes("perfekt")) {
+        result.conjugation.perfect = conjugation;
+      } else if (header.includes("plusquam")) {
+        result.conjugation.plusquam = conjugation;
+      } else if (header.includes("futur i") && !header.includes("ii")) {
+        result.conjugation.future = conjugation;
+      } else if (header.includes("konjunktiv ii") || header.includes("konj. ii")) {
+        result.conjugation.konjunktiv2 = conjugation;
+      } else if (header.includes("imperativ")) {
+        result.conjugation.imperative = conjugation;
       }
     }
   }
 
-  // Extract definitions (Bedeutungen)
+  result.examples = [];
+  const beispieleAnchored = html.match(/id="Beispiele"[\s\S]*?<section[^>]*>([\s\S]*?)<\/section>/i);
+  if (beispieleAnchored) {
+    const section = beispieleAnchored[1];
+    const liMatches = section.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi);
+    for (const li of liMatches) {
+      const content = li[1];
+      const brSplit = content.split(/<br\s*\/?>/i);
+      if (brSplit.length >= 2) {
+        const germanText = cleanHtml(brSplit[0]);
+        const afterBr = brSplit.slice(1).join(" ");
+        const imgMatch = afterBr.match(/<img[^>]*>[^<]*(&nbsp;|\s)/i);
+        if (imgMatch) {
+          const englishText = cleanHtml(afterBr.substring(imgMatch.index + imgMatch[0].length));
+          if (germanText && englishText) {
+            result.examples.push({ german: germanText, english: englishText });
+          }
+        } else {
+          const englishText = cleanHtml(afterBr);
+          if (germanText) result.examples.push({ german: germanText, english: englishText });
+        }
+      } else {
+        const text = cleanHtml(content);
+        if (text) result.examples.push(text);
+      }
+    }
+  }
+
+  result.translations = {};
+  const uebAnchored = html.match(/id="Uebersetzungen"[\s\S]*?<section[^>]*>([\s\S]*?)<\/section>/i);
+  if (uebAnchored) {
+    const section = uebAnchored[1];
+    const ddMatches = section.matchAll(/<dd\s+lang="([^"]+)"[^>]*>([\s\S]*?)<\/dd>/gi);
+    for (const dd of ddMatches) {
+      const langCode = dd[1].toLowerCase();
+      const ddContent = dd[2];
+      const spans = [...ddContent.matchAll(/<span[^>]*>([\s\S]*?)<\/span>/gi)];
+      if (spans.length > 0) {
+        const lastSpan = spans[spans.length - 1];
+        const text = cleanHtml(lastSpan[1]);
+        if (text) result.translations[langCode] = text;
+      }
+    }
+  }
+
   result.definitions = [];
-  const defSection = html.match(/Bedeutungen[\s\S]*?<section[^>]*>([\s\S]*?)<\/section>/i);
-  if (defSection) {
-    const defs = defSection[1].matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi);
-    for (const d of defs) {
-      const text = cleanHtml(d[1]).trim();
-      if (text && text.length > 5 && !text.startsWith("»")) {
-        result.definitions.push(text);
+  const bedAnchored = html.match(/id="Bedeutungen"[\s\S]*?<section[^>]*>([\s\S]*?)<\/section>/i);
+  if (bedAnchored) {
+    const section = bedAnchored[1];
+    const liMatches = section.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi);
+    for (const li of liMatches) {
+      const innerContent = li[1];
+      const innerTagMatch = innerContent.match(/^<[^>]+>([\s\S]*?)<\/[^>]+>$/);
+      if (innerTagMatch) {
+        const text = cleanHtml(innerTagMatch[1]);
+        if (text && text.length > 3) result.definitions.push(text);
+      } else {
+        const text = cleanHtml(innerContent);
+        if (text && text.length > 3) result.definitions.push(text);
       }
     }
   }
 
   return result;
-}
-
-function parseConjugationTable(html) {
-  const rows = {};
-  const text = cleanHtml(html);
-  const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
-  for (const line of lines) {
-    const m = line.match(/^(ich|du|er\/sie\/es|wir|ihr|sie\/Sie)\s+(.+)$/i);
-    if (m) {
-      const pronoun = m[1].toLowerCase();
-      rows[pronoun] = m[2].trim();
-    }
-  }
-  return Object.keys(rows).length > 0 ? rows : null;
-}
-
-function cleanHtml(html) {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#[0-9]+;/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 const server = createServer(async (req, res) => {
