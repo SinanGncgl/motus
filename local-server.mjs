@@ -1052,6 +1052,16 @@ const server = createServer(async (req, res) => {
             });
             if (!r.ok) continue;
             const html = await r.text();
+            // Extract base form from page title (e.g., Konjugation "erlauben" -> erlauben)
+            const titleMatch = html.match(/<(?:h1|h2)[^>]*>[^<]*?(?:Konjugation|Deklination)\s+"([^"]+)"/i);
+            if (titleMatch) {
+              const detectedBase = cleanHtml(titleMatch[1]).toLowerCase();
+              if (detectedBase && detectedBase !== word) {
+                result = parseVerbformen(html, detectedBase, type);
+                if (result) result.inputWord = word;
+                break;
+              }
+            }
             result = parseVerbformen(html, word, type);
             if (result) break;
           } catch { /* try next URL */ }
