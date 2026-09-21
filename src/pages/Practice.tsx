@@ -270,7 +270,7 @@ export default function Practice() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-2rem)] flex-col gap-3 overflow-hidden px-4 py-2">
+    <div className="flex h-[calc(100vh-2rem)] flex-col gap-3 overflow-y-auto px-4 py-2">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Practice</h1>
