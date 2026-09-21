@@ -329,6 +329,138 @@ async function staticFile(res, path) {
   }
 }
 
+function parseVerbformen(html, word, type) {
+  const result = { word, type, level: null, auxiliary: null, irregular: false, baseForm: word };
+
+  // Extract CEFR level (A1, A2, B1, B2, C1, C2)
+  const levelMatch = html.match(/<span[^>]*>\s*(A[12]|B[12]|C[12])\s*<\/span>/i);
+  if (levelMatch) result.level = levelMatch[1];
+
+  // Extract auxiliary verb for verbs
+  if (type === "verb") {
+    const auxMatch = html.match(/(haben|sein)\s*<\/span>/i);
+    if (auxMatch) result.auxiliary = auxMatch[1].toLowerCase();
+    result.irregular = /unregelmäßig/i.test(html);
+  }
+
+  // Extract pronunciation
+  const pronunciations = [];
+  const pronSection = html.match(/<p[^>]*class="[^"]*srt[^"]*"[^>]*>([\s\S]*?)<\/p>/i);
+  if (pronSection) {
+    const matches = pronSection[1].matchAll(/\/([^/]+)\//g);
+    for (const m of matches) pronunciations.push(`/${m[1]}/`);
+  }
+  if (pronunciations.length > 0) result.pronunciation = pronunciations;
+
+  // Extract conjugation tables
+  if (type === "verb") {
+    result.conjugation = {};
+
+    // Present tense
+    const presentMatch = html.match(/Präsens([\s\S]*?)(?:Präteritum|<\/section)/i);
+    if (presentMatch) {
+      result.conjugation.present = parseConjugationTable(presentMatch[1]);
+    }
+
+    // Past tense
+    const pastMatch = html.match(/Präteritum([\s\S]*?)(?:Perfekt|Konjunktiv|<\/section)/i);
+    if (pastMatch) {
+      result.conjugation.past = parseConjugationTable(pastMatch[1]);
+    }
+
+    // Perfect
+    const perfMatch = html.match(/Perfekt([\s\S]*?)(?:Plusquam|Futur|<\/section)/i);
+    if (perfMatch) {
+      result.conjugation.perfect = parseConjugationTable(perfMatch[1]);
+    }
+
+    // Konjunktiv II
+    const konj2Match = html.match(/Konjunktiv II([\s\S]*?)(?:Imperativ|<\/section)/i);
+    if (konj2Match) {
+      result.conjugation.konjunktiv2 = parseConjugationTable(konj2Match[1]);
+    }
+
+    // Imperative
+    const impMatch = html.match(/Imperativ([\s\S]*?)(?:Infinitiv|Partizip|<\/section)/i);
+    if (impMatch) {
+      result.conjugation.imperative = parseConjugationTable(impMatch[1]);
+    }
+
+    // Partizip
+    const partizipMatch = html.match(/Partizip I[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?Partizip II[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i);
+    if (partizipMatch) {
+      result.conjugation.partizipI = cleanHtml(partizipMatch[1]);
+      result.conjugation.partizipII = cleanHtml(partizipMatch[2]);
+    }
+  }
+
+  // Extract examples (Beispiele)
+  result.examples = [];
+  const exempelSection = html.match(/Beispiele[\s\S]*?<section[^>]*>([\s\S]*?)<\/section>/i);
+  if (exempelSection) {
+    const exampleBlocks = exempelSection[1].matchAll(/<p[^>]*class="[^"]*beispieltext[^"]*"[^>]*>([\s\S]*?)<\/p>/gi);
+    for (const block of exampleBlocks) {
+      const text = cleanHtml(block[1]).trim();
+      if (text) result.examples.push(text);
+    }
+  }
+
+  // Extract translations
+  result.translations = {};
+  const transSection = html.match(/Übersetzungen[\s\S]*?<section[^>]*>([\s\S]*?)<\/section>/i);
+  if (transSection) {
+    const langBlocks = transSection[1].matchAll(/<img[^>]*alt="([^"]*)"[^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/gi);
+    for (const block of langBlocks) {
+      const lang = block[1].trim().toLowerCase();
+      const text = cleanHtml(block[2]).trim();
+      if (lang && text && lang !== "deutsch") {
+        result.translations[lang] = text;
+      }
+    }
+  }
+
+  // Extract definitions (Bedeutungen)
+  result.definitions = [];
+  const defSection = html.match(/Bedeutungen[\s\S]*?<section[^>]*>([\s\S]*?)<\/section>/i);
+  if (defSection) {
+    const defs = defSection[1].matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi);
+    for (const d of defs) {
+      const text = cleanHtml(d[1]).trim();
+      if (text && text.length > 5 && !text.startsWith("»")) {
+        result.definitions.push(text);
+      }
+    }
+  }
+
+  return result;
+}
+
+function parseConjugationTable(html) {
+  const rows = {};
+  const text = cleanHtml(html);
+  const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const m = line.match(/^(ich|du|er\/sie\/es|wir|ihr|sie\/Sie)\s+(.+)$/i);
+    if (m) {
+      const pronoun = m[1].toLowerCase();
+      rows[pronoun] = m[2].trim();
+    }
+  }
+  return Object.keys(rows).length > 0 ? rows : null;
+}
+
+function cleanHtml(html) {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#[0-9]+;/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const server = createServer(async (req, res) => {
   cors(res);
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -863,6 +995,55 @@ const server = createServer(async (req, res) => {
         }
       } catch {}
       return send(res, 200, { definition: "", baseForm: word });
+    }
+    // Verbformen.de integration — scrape conjugation, examples, translations, definitions
+    {
+      const verbformenMatch = req.url?.match(/^\/api\/verbformen\/([^/]+)$/);
+      if (req.method === "GET" && u && verbformenMatch) {
+        const word = decodeURIComponent(verbformenMatch[1]).trim().toLowerCase();
+        if (!word) return send(res, 200, null);
+
+        // Check cache first (30-day TTL)
+        const cached = await q1(
+          "SELECT data, scraped_at FROM verbformen_cache WHERE word = $1",
+          [word]
+        );
+        const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+        if (cached && Date.now() - cached.scraped_at < THIRTY_DAYS) {
+          return send(res, 200, cached.data);
+        }
+
+        // Scrape verbformen.de — try verb, noun, adjective in order
+        const urls = [
+          { url: `https://www.verbformen.de/konjugation/${encodeURIComponent(word)}.htm`, type: "verb" },
+          { url: `https://www.verbformen.de/deklination/substantive/${encodeURIComponent(word)}.htm`, type: "noun" },
+          { url: `https://www.verbformen.de/deklination/adjektive/${encodeURIComponent(word)}.htm`, type: "adjective" },
+        ];
+
+        let result = null;
+        for (const { url, type } of urls) {
+          try {
+            const r = await fetch(url, {
+              headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Motus/1.0" },
+              redirect: "follow",
+            });
+            if (!r.ok) continue;
+            const html = await r.text();
+            result = parseVerbformen(html, word, type);
+            if (result) break;
+          } catch { /* try next URL */ }
+        }
+
+        if (!result) return send(res, 200, null);
+
+        // Cache the result
+        await q(
+          "INSERT INTO verbformen_cache (word, data, scraped_at) VALUES ($1, $2, $3) ON CONFLICT (word) DO UPDATE SET data = $2, scraped_at = $3",
+          [word, JSON.stringify(result), Date.now()]
+        );
+
+        return send(res, 200, result);
+      }
     }
     // Proxy sentence translation to the LibreTranslate server (defaults to a
     // self-hosted instance on localhost:5000). The API key never reaches the
