@@ -2,7 +2,8 @@ import { SpeakerButton } from "@/components/app/SpeakerButton";
 import { offlineLookup } from "@/lib/offline-dictionary";
 import { localApi } from "@/lib/local-api";
 import { cn } from "@/lib/utils";
-import { BookmarkCheck, ExternalLink, Plus, X } from "lucide-react";
+import { VerbformenPanel } from "@/components/app/VerbformenPanel";
+import { BookmarkCheck, ExternalLink, Plus, BookOpen, X } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
 
 interface Props {
@@ -36,6 +37,7 @@ export function WordTooltip({
   const triggerRef = useRef<HTMLSpanElement>(null);
   const popupRef = useRef<HTMLSpanElement>(null);
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
+  const [verbformenOpen, setVerbformenOpen] = useState(false);
 
   useEffect(() => {
     if (!open || !triggerRef.current) return;
@@ -207,9 +209,25 @@ export function WordTooltip({
             >
               <ExternalLink className="size-3" /> dict.cc
             </a>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setVerbformenOpen(true);
+                setOpen(false);
+              }}
+              className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted"
+            >
+              <BookOpen className="size-3" /> Verbformen
+            </button>
           </span>
         </span>
       )}
+      <VerbformenPanel
+        open={verbformenOpen}
+        onOpenChange={setVerbformenOpen}
+        word={baseForm || display}
+      />
     </span>
   );
 }
