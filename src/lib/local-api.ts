@@ -82,6 +82,21 @@ export const localApi = {
   dictionaryDe: async (word: string) => {
     return request<{ definition: string; baseForm: string } | null>("/api/dictionary/de", { method: "POST", body: JSON.stringify({ word }) });
   },
+  verbformen: async (word: string) => {
+    return request<{
+      word: string;
+      type: string;
+      level: string | null;
+      auxiliary: string | null;
+      irregular: boolean;
+      baseForm: string;
+      pronunciation: string[];
+      conjugation: Record<string, Record<string, string> | null>;
+      examples: string[];
+      translations: Record<string, string>;
+      definitions: string[];
+    } | null>(`/api/verbformen/${encodeURIComponent(word)}`);
+  },
   upload: async (file: File) => { const response = await fetch(`${BASE}/api/uploads`, { method: "POST", headers: headers({ "Content-Type": file.type || "application/octet-stream", "X-File-Name": file.name }), body: file }); if (!response.ok) throw new Error("UPLOAD_FAILED"); return response.json() as Promise<{ storageId: string; fileName: string }>; },
   grab: (url: string) => request<{ storageId: string; fileName: string; fileUrl: string }>("/api/grab", { method: "POST", body: JSON.stringify({ url }) }),
   transcribeFile: (storageId: string, language?: string, model?: string) => request<{ lines: LocalLine[]; language: string }>("/api/transcribe-file", { method: "POST", body: JSON.stringify({ storageId, language, model }) }),
