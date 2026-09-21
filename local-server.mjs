@@ -331,7 +331,7 @@ async function staticFile(res, path) {
 
 function cleanHtml(html) {
   return html
-    .replace(/<[^>]+>/g, "")
+    .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -403,7 +403,7 @@ function parseVerbformen(html, word, type) {
       } else if (header.includes("perfekt")) {
         result.conjugation.perfect = conjugation;
       } else if (header.includes("plusquam")) {
-        result.conjugation.plusquam = conjugation;
+        result.conjugation.plusquamperfekt = conjugation;
       } else if (header.includes("futur i") && !header.includes("ii")) {
         result.conjugation.future = conjugation;
       } else if (header.includes("konjunktiv ii") || header.includes("konj. ii")) {
@@ -429,11 +429,11 @@ function parseVerbformen(html, word, type) {
         if (imgMatch) {
           const englishText = cleanHtml(afterBr.substring(imgMatch.index + imgMatch[0].length));
           if (germanText && englishText) {
-            result.examples.push({ german: germanText, english: englishText });
+            result.examples.push(`${germanText} — ${englishText}`);
           }
         } else {
           const englishText = cleanHtml(afterBr);
-          if (germanText) result.examples.push({ german: germanText, english: englishText });
+          if (germanText) result.examples.push(`${germanText}${englishText ? " — " + englishText : ""}`);
         }
       } else {
         const text = cleanHtml(content);
@@ -1045,6 +1045,7 @@ const server = createServer(async (req, res) => {
             const r = await fetch(url, {
               headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Motus/1.0" },
               redirect: "follow",
+              signal: AbortSignal.timeout(10_000),
             });
             if (!r.ok) continue;
             const html = await r.text();
@@ -1056,10 +1057,14 @@ const server = createServer(async (req, res) => {
         if (!result) return send(res, 200, null);
 
         // Cache the result
-        await q(
-          "INSERT INTO verbformen_cache (word, data, scraped_at) VALUES ($1, $2, $3) ON CONFLICT (word) DO UPDATE SET data = $2, scraped_at = $3",
-          [word, JSON.stringify(result), Date.now()]
-        );
+        try {
+          await q(
+            "INSERT INTO verbformen_cache (word, data, scraped_at) VALUES ($1, $2, $3) ON CONFLICT (word) DO UPDATE SET data = $2, scraped_at = $3",
+            [word, JSON.stringify(result), Date.now()]
+          );
+        } catch (e) {
+          console.error(`[verbformen] cache write failed for "${word}":`, e.message);
+        }
 
         return send(res, 200, result);
       }
