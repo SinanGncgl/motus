@@ -449,6 +449,7 @@ function parseVerbformen(html, word, type) {
     const ddMatches = section.matchAll(/<dd\s+lang="([^"]+)"[^>]*>([\s\S]*?)<\/dd>/gi);
     for (const dd of ddMatches) {
       const langCode = dd[1].toLowerCase();
+      if (langCode !== "en") continue;
       const ddContent = dd[2];
       const spans = [...ddContent.matchAll(/<span[^>]*>([\s\S]*?)<\/span>/gi)];
       if (spans.length > 0) {
@@ -1019,7 +1020,8 @@ const server = createServer(async (req, res) => {
     {
       const verbformenMatch = req.url?.match(/^\/api\/verbformen\/([^/]+)$/);
       if (req.method === "GET" && u && verbformenMatch) {
-        const word = decodeURIComponent(verbformenMatch[1]).trim().toLowerCase();
+        const rawWord = decodeURIComponent(verbformenMatch[1]).trim().toLowerCase();
+        const word = rawWord.replace(/[.,!?;:'"()]/g, "").trim();
         if (!word) return send(res, 200, null);
 
         // Check cache first (30-day TTL)
@@ -1032,9 +1034,10 @@ const server = createServer(async (req, res) => {
           return send(res, 200, cached.data);
         }
 
-        // Scrape verbformen.de — try verb, noun, adjective in order
+        // Scrape verbformen.de — try verb (direct + search), noun, adjective
         const urls = [
           { url: `https://www.verbformen.de/konjugation/${encodeURIComponent(word)}.htm`, type: "verb" },
+          { url: `https://www.verbformen.de/konjugation/?w=${encodeURIComponent(word)}&id=verb%3A${encodeURIComponent(word)}`, type: "verb" },
           { url: `https://www.verbformen.de/deklination/substantive/${encodeURIComponent(word)}.htm`, type: "noun" },
           { url: `https://www.verbformen.de/deklination/adjektive/${encodeURIComponent(word)}.htm`, type: "adjective" },
         ];
